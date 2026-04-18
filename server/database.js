@@ -1,35 +1,104 @@
 // ======================================
-// DATABASE MODULE — SQLite (sql.js — pure JS)
+// DATABASE MODULE — DUAL MODE
+// ☁️ TURSO CLOUD: Khi deploy lên hosting (set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN)
+// 💻 SQL.JS LOCAL: Khi chạy local dev (không cần config gì)
 // ======================================
-const initSqlJs = require('sql.js');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
 const SALT = 'aishop_salt_2026';
-
 const DB_PATH = path.join(__dirname, 'data.db');
-
-let db = null;
+const DB_BACKUP_PATH = path.join(__dirname, 'data.db.backup');
 
 // ======================================
-// KHỞI TẠO DATABASE (async vì sql.js cần init WASM)
+// DETECT MODE: Turso Cloud hoặc Local
+// ======================================
+const USE_TURSO = !!(process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN);
+
+let tursoClient = null;   // @libsql/client (cloud)
+let localDb = null;        // sql.js (local)
+let isDirty = false;
+let saveTimer = null;
+let saveCount = 0;
+const AUTO_SAVE_INTERVAL = 10000;
+
+// ======================================
+// KHỞI TẠO DATABASE
 // ======================================
 async function initDatabase() {
-    const SQL = await initSqlJs();
+    if (USE_TURSO) {
+        // ☁️ TURSO CLOUD MODE
+        const { createClient } = require('@libsql/client');
+        tursoClient = createClient({
+            url: process.env.TURSO_DATABASE_URL,
+            authToken: process.env.TURSO_AUTH_TOKEN,
+        });
 
-    // Nếu đã có file database, đọc vào
-    if (fs.existsSync(DB_PATH)) {
-        const fileBuffer = fs.readFileSync(DB_PATH);
-        db = new SQL.Database(fileBuffer);
+        // Test kết nối
+        try {
+            await tursoClient.execute('SELECT 1');
+            console.log('☁️ Kết nối Turso Cloud Database thành công!');
+            console.log(`📡 URL: ${process.env.TURSO_DATABASE_URL}`);
+        } catch (err) {
+            console.error('❌ Không thể kết nối Turso:', err.message);
+            throw err;
+        }
     } else {
-        db = new SQL.Database();
+        // 💻 LOCAL MODE (sql.js)
+        const initSqlJs = require('sql.js');
+        const SQL = await initSqlJs();
+
+        if (fs.existsSync(DB_PATH)) {
+            try {
+                const fileBuffer = fs.readFileSync(DB_PATH);
+                localDb = new SQL.Database(fileBuffer);
+                console.log(`📁 Database loaded: ${DB_PATH} (${(fileBuffer.length / 1024).toFixed(1)} KB)`);
+            } catch (err) {
+                console.error('⚠️ File database chính bị lỗi, thử khôi phục từ backup...');
+                if (fs.existsSync(DB_BACKUP_PATH)) {
+                    try {
+                        const backupBuffer = fs.readFileSync(DB_BACKUP_PATH);
+                        localDb = new SQL.Database(backupBuffer);
+                        console.log('✅ Khôi phục thành công từ backup!');
+                        saveToFile();
+                    } catch (backupErr) {
+                        console.error('❌ Backup cũng bị lỗi. Tạo database mới...');
+                        localDb = new SQL.Database();
+                    }
+                } else {
+                    console.error('❌ Không có backup. Tạo database mới...');
+                    localDb = new SQL.Database();
+                }
+            }
+        } else {
+            localDb = new SQL.Database();
+            console.log('📁 Tạo database mới (local)...');
+        }
     }
 
     // Tạo bảng
-    db.run(`
-        CREATE TABLE IF NOT EXISTS customers (
+    await createTables();
+
+    // Local: lưu file & bắt đầu auto-save
+    if (!USE_TURSO) {
+        saveToFile();
+        startAutoSave();
+    }
+
+    await initSettings();
+    await seedIfEmpty();
+
+    return true;
+}
+
+// ======================================
+// TẠO BẢNG
+// ======================================
+async function createTables() {
+    const tableStatements = [
+        `CREATE TABLE IF NOT EXISTS customers (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             phone TEXT DEFAULT '',
@@ -41,141 +110,170 @@ async function initDatabase() {
             endDate TEXT DEFAULT '',
             isEmailSent INTEGER DEFAULT 0,
             isNotifGenerated INTEGER DEFAULT 0
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS admins (
+        )`,
+        `CREATE TABLE IF NOT EXISTS admins (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT DEFAULT ''
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS services (
+        )`,
+        `CREATE TABLE IF NOT EXISTS services (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             icon TEXT DEFAULT 'ph-cube',
             color TEXT DEFAULT '#6366f1'
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS notifications (
+        )`,
+        `CREATE TABLE IF NOT EXISTS notifications (
             id TEXT PRIMARY KEY,
             custId TEXT DEFAULT '',
             title TEXT DEFAULT '',
             body TEXT DEFAULT '',
             time TEXT DEFAULT '',
             isRead INTEGER DEFAULT 0
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
+        )`,
+        `CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             fullName TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
             passwordHash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
             createdAt TEXT DEFAULT ''
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS sessions (
+        )`,
+        `CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
             userId TEXT NOT NULL,
             createdAt TEXT DEFAULT ''
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS settings (
+        )`,
+        `CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
-        )
-    `);
+        )`
+    ];
 
-    saveToFile();
-    initSettings();
-    seedIfEmpty();
+    if (USE_TURSO) {
+        // Turso: batch execute cho hiệu năng
+        await tursoClient.batch(tableStatements.map(sql => ({ sql, args: [] })));
+    } else {
+        // Local: chạy từng câu
+        for (const sql of tableStatements) {
+            localDb.run(sql);
+        }
+    }
+}
 
-    return db;
+// ======================================
+// LOCAL PERSISTENCE — Lưu trữ bền bỉ (chỉ cho local mode)
+// ======================================
+function saveToFile() {
+    if (!localDb) return;
+    try {
+        const data = localDb.export();
+        const buffer = Buffer.from(data);
+        if (fs.existsSync(DB_PATH)) {
+            try { fs.copyFileSync(DB_PATH, DB_BACKUP_PATH); } catch (e) {}
+        }
+        fs.writeFileSync(DB_PATH, buffer);
+        isDirty = false;
+        saveCount++;
+        if (saveCount % 10 === 0) {
+            console.log(`💾 Auto-save #${saveCount} (${(buffer.length / 1024).toFixed(1)} KB)`);
+        }
+    } catch (err) {
+        console.error('❌ Lỗi khi lưu database:', err.message);
+    }
+}
+
+function markDirty() { isDirty = true; }
+
+function startAutoSave() {
+    if (saveTimer) clearInterval(saveTimer);
+    saveTimer = setInterval(() => {
+        if (isDirty) saveToFile();
+    }, AUTO_SAVE_INTERVAL);
+    if (saveTimer.unref) saveTimer.unref();
+}
+
+function stopAutoSave() {
+    if (saveTimer) { clearInterval(saveTimer); saveTimer = null; }
+}
+
+// ======================================
+// CORE QUERY HELPERS — Hoạt động cả 2 chế độ
+// ======================================
+
+// SELECT trả về mảng objects
+async function queryAll(sql, params = []) {
+    if (USE_TURSO) {
+        const result = await tursoClient.execute({ sql, args: params });
+        return result.rows;
+    } else {
+        const stmt = localDb.prepare(sql);
+        if (params.length) stmt.bind(params);
+        const rows = [];
+        while (stmt.step()) {
+            rows.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return rows;
+    }
+}
+
+// SELECT trả về 1 row
+async function queryOne(sql, params = []) {
+    const rows = await queryAll(sql, params);
+    return rows.length > 0 ? rows[0] : null;
+}
+
+// INSERT/UPDATE/DELETE
+async function execute(sql, params = []) {
+    if (USE_TURSO) {
+        return await tursoClient.execute({ sql, args: params });
+    } else {
+        localDb.run(sql, params);
+        markDirty();
+        saveToFile();
+    }
 }
 
 // ======================================
 // CẤU HÌNH HỆ THỐNG
 // ======================================
-function getSetting(k) {
-    const row = queryOne('SELECT value FROM settings WHERE key = ?', [k]);
+async function getSetting(k) {
+    const row = await queryOne('SELECT value FROM settings WHERE key = ?', [k]);
     return row ? row.value : null;
 }
 
-function setSetting(k, v) {
-    execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, v]);
+async function setSetting(k, v) {
+    await execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, v]);
 }
 
-function generateInviteCode() {
+async function generateInviteCode() {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setSetting('admin_invite_code', code);
+    await setSetting('admin_invite_code', code);
     return code;
 }
 
-function initSettings() {
-    if (!getSetting('admin_invite_code')) {
-        generateInviteCode();
+async function initSettings() {
+    const code = await getSetting('admin_invite_code');
+    if (!code) {
+        await generateInviteCode();
     }
-}
-
-// Lưu database ra file
-function saveToFile() {
-    if (!db) return;
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_PATH, buffer);
-}
-
-// Helper: chạy query SELECT trả về mảng objects
-function queryAll(sql, params = []) {
-    const stmt = db.prepare(sql);
-    if (params.length) stmt.bind(params);
-    const rows = [];
-    while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return rows;
-}
-
-// Helper: chạy query SELECT trả về 1 row
-function queryOne(sql, params = []) {
-    const rows = queryAll(sql, params);
-    return rows.length > 0 ? rows[0] : null;
-}
-
-// Helper: chạy INSERT/UPDATE/DELETE
-function execute(sql, params = []) {
-    db.run(sql, params);
-    saveToFile();
 }
 
 // ======================================
 // CUSTOMERS
 // ======================================
-function getAllCustomers() {
-    return queryAll('SELECT * FROM customers').map(formatCustomer);
+async function getAllCustomers() {
+    return (await queryAll('SELECT * FROM customers')).map(formatCustomer);
 }
 
-function getCustomer(id) {
-    const row = queryOne('SELECT * FROM customers WHERE id = ?', [id]);
+async function getCustomer(id) {
+    const row = await queryOne('SELECT * FROM customers WHERE id = ?', [id]);
     return row ? formatCustomer(row) : null;
 }
 
-function addCustomer(data) {
+async function addCustomer(data) {
     const id = uuidv4();
-    execute(
+    await execute(
         `INSERT INTO customers (id, name, phone, service, adminId, email, password, startDate, endDate, isEmailSent, isNotifGenerated)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, data.name || '', data.phone || '', data.service || '', data.adminId || '',
@@ -185,8 +283,8 @@ function addCustomer(data) {
     return id;
 }
 
-function updateCustomer(id, data) {
-    const existing = getCustomer(id);
+async function updateCustomer(id, data) {
+    const existing = await getCustomer(id);
     if (!existing) return false;
 
     const fields = [];
@@ -206,14 +304,14 @@ function updateCustomer(id, data) {
     if (fields.length === 0) return true;
 
     values.push(id);
-    execute(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, values);
+    await execute(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, values);
     return true;
 }
 
-function deleteCustomer(id) {
-    const before = queryAll('SELECT COUNT(*) as cnt FROM customers WHERE id = ?', [id]);
-    if (before[0].cnt === 0) return false;
-    execute('DELETE FROM customers WHERE id = ?', [id]);
+async function deleteCustomer(id) {
+    const before = await queryOne('SELECT COUNT(*) as cnt FROM customers WHERE id = ?', [id]);
+    if (before.cnt === 0) return false;
+    await execute('DELETE FROM customers WHERE id = ?', [id]);
     return true;
 }
 
@@ -228,19 +326,19 @@ function formatCustomer(row) {
 // ======================================
 // ADMINS
 // ======================================
-function getAllAdmins() {
-    return queryAll('SELECT * FROM admins');
+async function getAllAdmins() {
+    return await queryAll('SELECT * FROM admins');
 }
 
-function addAdmin(data) {
+async function addAdmin(data) {
     const id = uuidv4();
-    execute('INSERT INTO admins (id, name, email) VALUES (?, ?, ?)',
+    await execute('INSERT INTO admins (id, name, email) VALUES (?, ?, ?)',
         [id, data.name || '', data.email || '']);
     return id;
 }
 
-function updateAdmin(id, data) {
-    const existing = queryOne('SELECT * FROM admins WHERE id = ?', [id]);
+async function updateAdmin(id, data) {
+    const existing = await queryOne('SELECT * FROM admins WHERE id = ?', [id]);
     if (!existing) return false;
 
     const fields = [];
@@ -250,33 +348,33 @@ function updateAdmin(id, data) {
     if (fields.length === 0) return true;
 
     values.push(id);
-    execute(`UPDATE admins SET ${fields.join(', ')} WHERE id = ?`, values);
+    await execute(`UPDATE admins SET ${fields.join(', ')} WHERE id = ?`, values);
     return true;
 }
 
-function deleteAdmin(id) {
-    const before = queryAll('SELECT COUNT(*) as cnt FROM admins WHERE id = ?', [id]);
-    if (before[0].cnt === 0) return false;
-    execute('DELETE FROM admins WHERE id = ?', [id]);
+async function deleteAdmin(id) {
+    const before = await queryOne('SELECT COUNT(*) as cnt FROM admins WHERE id = ?', [id]);
+    if (before.cnt === 0) return false;
+    await execute('DELETE FROM admins WHERE id = ?', [id]);
     return true;
 }
 
 // ======================================
 // SERVICES
 // ======================================
-function getAllServices() {
-    return queryAll('SELECT * FROM services');
+async function getAllServices() {
+    return await queryAll('SELECT * FROM services');
 }
 
-function addService(data) {
+async function addService(data) {
     const id = uuidv4();
-    execute('INSERT INTO services (id, name, icon, color) VALUES (?, ?, ?, ?)',
+    await execute('INSERT INTO services (id, name, icon, color) VALUES (?, ?, ?, ?)',
         [id, data.name || '', data.icon || 'ph-cube', data.color || '#6366f1']);
     return id;
 }
 
-function updateService(id, data) {
-    const existing = queryOne('SELECT * FROM services WHERE id = ?', [id]);
+async function updateService(id, data) {
+    const existing = await queryOne('SELECT * FROM services WHERE id = ?', [id]);
     if (!existing) return false;
 
     const fields = [];
@@ -287,28 +385,28 @@ function updateService(id, data) {
     if (fields.length === 0) return true;
 
     values.push(id);
-    execute(`UPDATE services SET ${fields.join(', ')} WHERE id = ?`, values);
+    await execute(`UPDATE services SET ${fields.join(', ')} WHERE id = ?`, values);
     return true;
 }
 
-function deleteService(id) {
-    const before = queryAll('SELECT COUNT(*) as cnt FROM services WHERE id = ?', [id]);
-    if (before[0].cnt === 0) return false;
-    execute('DELETE FROM services WHERE id = ?', [id]);
+async function deleteService(id) {
+    const before = await queryOne('SELECT COUNT(*) as cnt FROM services WHERE id = ?', [id]);
+    if (before.cnt === 0) return false;
+    await execute('DELETE FROM services WHERE id = ?', [id]);
     return true;
 }
 
 // ======================================
 // NOTIFICATIONS
 // ======================================
-function getAllNotifications() {
-    return queryAll('SELECT * FROM notifications ORDER BY time DESC')
+async function getAllNotifications() {
+    return (await queryAll('SELECT * FROM notifications ORDER BY time DESC'))
         .map(n => ({ ...n, isRead: !!n.isRead }));
 }
 
-function addNotification(data) {
+async function addNotification(data) {
     const id = uuidv4();
-    execute(
+    await execute(
         'INSERT INTO notifications (id, custId, title, body, time, isRead) VALUES (?, ?, ?, ?, ?, ?)',
         [id, data.custId || '', data.title || '', data.body || '',
          data.time || new Date().toISOString(), data.isRead ? 1 : 0]
@@ -316,7 +414,7 @@ function addNotification(data) {
     return id;
 }
 
-function updateNotification(id, data) {
+async function updateNotification(id, data) {
     const fields = [];
     const values = [];
     if (data.isRead !== undefined) { fields.push('isRead = ?'); values.push(data.isRead ? 1 : 0); }
@@ -325,7 +423,7 @@ function updateNotification(id, data) {
     if (fields.length === 0) return true;
 
     values.push(id);
-    execute(`UPDATE notifications SET ${fields.join(', ')} WHERE id = ?`, values);
+    await execute(`UPDATE notifications SET ${fields.join(', ')} WHERE id = ?`, values);
     return true;
 }
 
@@ -336,41 +434,41 @@ function hashPassword(password) {
     return crypto.createHash('sha256').update(SALT + password).digest('hex');
 }
 
-function createUser(data) {
-    const existing = queryOne('SELECT id FROM users WHERE email = ?', [data.email]);
+async function createUser(data) {
+    const existing = await queryOne('SELECT id FROM users WHERE email = ?', [data.email]);
     if (existing) return { error: 'Email đã tồn tại' };
     const id = uuidv4();
-    execute(
+    await execute(
         'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
         [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', new Date().toISOString()]
     );
     return { id };
 }
 
-function getUserByEmail(email) {
-    return queryOne('SELECT * FROM users WHERE email = ?', [email]);
+async function getUserByEmail(email) {
+    return await queryOne('SELECT * FROM users WHERE email = ?', [email]);
 }
 
-function getUserById(id) {
-    const u = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+async function getUserById(id) {
+    const u = await queryOne('SELECT * FROM users WHERE id = ?', [id]);
     if (u) delete u.passwordHash;
     return u;
 }
 
-function getAllUsers() {
-    return queryAll('SELECT id, fullName, email, role, createdAt FROM users');
+async function getAllUsers() {
+    return await queryAll('SELECT id, fullName, email, role, createdAt FROM users');
 }
 
-function updateUserRole(id, role) {
-    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+async function updateUserRole(id, role) {
+    const existing = await queryOne('SELECT * FROM users WHERE id = ?', [id]);
     if (!existing) return false;
     if (existing.role === 'superadmin') return false; // Không thể thay đổi superadmin
-    execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+    await execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
     return true;
 }
 
-function updateUserProfile(id, data) {
-    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+async function updateUserProfile(id, data) {
+    const existing = await queryOne('SELECT * FROM users WHERE id = ?', [id]);
     if (!existing) return false;
     const fields = [];
     const values = [];
@@ -378,74 +476,107 @@ function updateUserProfile(id, data) {
     if (data.password !== undefined) { fields.push('passwordHash = ?'); values.push(hashPassword(data.password)); }
     if (fields.length === 0) return true;
     values.push(id);
-    execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    await execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
     return true;
 }
 
-function deleteUser(id) {
-    const existing = queryOne('SELECT * FROM users WHERE id = ?', [id]);
+async function deleteUser(id) {
+    const existing = await queryOne('SELECT * FROM users WHERE id = ?', [id]);
     if (!existing || existing.role === 'superadmin') return false;
-    execute('DELETE FROM sessions WHERE userId = ?', [id]);
-    execute('DELETE FROM users WHERE id = ?', [id]);
+    await execute('DELETE FROM sessions WHERE userId = ?', [id]);
+    await execute('DELETE FROM users WHERE id = ?', [id]);
     return true;
 }
 
-function verifyPassword(email, password) {
-    const user = queryOne('SELECT * FROM users WHERE email = ?', [email]);
+async function verifyPassword(email, password) {
+    const user = await queryOne('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) return null;
     if (user.passwordHash !== hashPassword(password)) return null;
     const { passwordHash, ...safe } = user;
     return safe;
 }
 
-function createSession(userId) {
+async function createSession(userId) {
     const token = uuidv4();
-    execute('INSERT INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)',
+    await execute('INSERT INTO sessions (token, userId, createdAt) VALUES (?, ?, ?)',
         [token, userId, new Date().toISOString()]);
     return token;
 }
 
-function getSession(token) {
+async function getSession(token) {
     if (!token) return null;
-    const session = queryOne('SELECT * FROM sessions WHERE token = ?', [token]);
+    const session = await queryOne('SELECT * FROM sessions WHERE token = ?', [token]);
     if (!session) return null;
-    const user = queryOne('SELECT id, fullName, email, role, createdAt FROM users WHERE id = ?', [session.userId]);
+    const user = await queryOne('SELECT id, fullName, email, role, createdAt FROM users WHERE id = ?', [session.userId]);
     return user || null;
 }
 
-function deleteSession(token) {
-    execute('DELETE FROM sessions WHERE token = ?', [token]);
+async function deleteSession(token) {
+    await execute('DELETE FROM sessions WHERE token = ?', [token]);
 }
 
 // ======================================
 // SEED DATA (nếu database trống)
 // ======================================
-function seedIfEmpty() {
+async function seedIfEmpty() {
     // Seed SuperAdmin nếu chưa có
-    const superAdmin = queryOne("SELECT id FROM users WHERE role = 'superadmin'");
+    const superAdmin = await queryOne("SELECT id FROM users WHERE role = 'superadmin'");
     if (!superAdmin) {
         console.log('🔐 Tạo tài khoản Admin Minh mặc định...');
-        createUser({ fullName: 'Admin Minh', email: 'admin@aishop.com', password: 'admin123', role: 'superadmin' });
+        await createUser({ fullName: 'Admin Minh', email: 'admin@aishop.com', password: 'admin123', role: 'superadmin' });
         console.log('✅ Admin Minh: admin@aishop.com / admin123');
     }
 
     // Seed services nếu chưa có
-    const svcCount = queryOne('SELECT COUNT(*) as cnt FROM services');
+    const svcCount = await queryOne('SELECT COUNT(*) as cnt FROM services');
     if (svcCount.cnt === 0) {
         console.log('📦 Đang tạo dữ liệu dịch vụ mẫu...');
-        addService({ name: 'ChatGPT Plus', icon: 'ph-robot', color: '#10a37f' });
-        addService({ name: 'Canva Pro', icon: 'ph-paint-brush-broad', color: '#00c4cc' });
-        addService({ name: 'Adobe Creative Cloud', icon: 'ph-swatches', color: '#ff0000' });
-        addService({ name: 'Netflix Premium', icon: 'ph-video-camera', color: '#e50914' });
-        addService({ name: 'Midjourney', icon: 'ph-sailboat', color: '#7c3aed' });
-        addService({ name: 'Khác', icon: 'ph-atom', color: '#6366f1' });
+        await addService({ name: 'ChatGPT Plus', icon: 'ph-robot', color: '#10a37f' });
+        await addService({ name: 'Canva Pro', icon: 'ph-paint-brush-broad', color: '#00c4cc' });
+        await addService({ name: 'Adobe Creative Cloud', icon: 'ph-swatches', color: '#ff0000' });
+        await addService({ name: 'Netflix Premium', icon: 'ph-video-camera', color: '#e50914' });
+        await addService({ name: 'Midjourney', icon: 'ph-sailboat', color: '#7c3aed' });
+        await addService({ name: 'Khác', icon: 'ph-atom', color: '#6366f1' });
         console.log('✅ Dữ liệu dịch vụ mẫu đã tạo xong!');
     }
 
-    const count = queryOne('SELECT COUNT(*) as cnt FROM customers');
+    const count = await queryOne('SELECT COUNT(*) as cnt FROM customers');
     if (count.cnt === 0) {
         console.log('ℹ️ Chưa có dữ liệu khách hàng. Hệ thống đã tắt tính năng tự động tạo dữ liệu mẫu.');
-        // Dữ liệu mẫu đã được vô hiệu hóa để chuẩn bị cho môi trường thật
+    }
+}
+
+// ======================================
+// DATABASE INFO
+// ======================================
+async function getDatabaseInfo() {
+    try {
+        const tables = await queryAll("SELECT name FROM sqlite_master WHERE type='table'");
+        if (USE_TURSO) {
+            return {
+                mode: 'turso_cloud',
+                url: process.env.TURSO_DATABASE_URL,
+                tables: tables.map(t => t.name),
+                persistent: true,
+                description: 'Dữ liệu lưu trên Turso Cloud, không bị mất khi restart/deploy'
+            };
+        } else {
+            const stats = fs.statSync(DB_PATH);
+            return {
+                mode: 'local_sqljs',
+                path: DB_PATH,
+                sizeBytes: stats.size,
+                sizeKB: (stats.size / 1024).toFixed(1),
+                sizeMB: (stats.size / (1024 * 1024)).toFixed(2),
+                tables: tables.map(t => t.name),
+                saveCount: saveCount,
+                hasBackup: fs.existsSync(DB_BACKUP_PATH),
+                persistent: true,
+                description: 'Dữ liệu lưu trong file data.db trên ổ đĩa local'
+            };
+        }
+    } catch (e) {
+        return { error: e.message };
     }
 }
 
@@ -459,10 +590,24 @@ module.exports = {
     getAllServices, addService, updateService, deleteService,
     getAllNotifications, addNotification, updateNotification,
     getSetting, setSetting, generateInviteCode,
+    getDatabaseInfo,
     // Auth
     createUser, getUserByEmail, getUserById, getAllUsers,
     updateUserRole, updateUserProfile, deleteUser,
     verifyPassword, hashPassword,
     createSession, getSession, deleteSession,
-    close: () => { if (db) { saveToFile(); db.close(); } }
+    // Info
+    get mode() { return USE_TURSO ? 'turso' : 'local'; },
+    close: () => {
+        stopAutoSave();
+        if (localDb) {
+            if (isDirty) saveToFile();
+            localDb.close();
+            console.log('💾 Database đã được lưu và đóng an toàn.');
+        }
+        if (tursoClient) {
+            tursoClient.close();
+            console.log('☁️ Turso connection đã đóng.');
+        }
+    }
 };

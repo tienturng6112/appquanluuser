@@ -1,6 +1,9 @@
 // ======================================
 // EXPRESS SERVER — AISHOP DASHBOARD
+// Hỗ trợ: Turso Cloud + SQL.js Local
 // ======================================
+require('dotenv').config(); // Load biến môi trường từ .env
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -51,21 +54,25 @@ function broadcast(eventType) {
 }
 
 // ======================================
-// AUTH MIDDLEWARE
+// AUTH MIDDLEWARE (async — hỗ trợ Turso)
 // ======================================
-function authMiddleware(req, res, next) {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Chưa đăng nhập' });
+async function authMiddleware(req, res, next) {
+    try {
+        const auth = req.headers.authorization;
+        if (!auth || !auth.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Chưa đăng nhập' });
+        }
+        const token = auth.split(' ')[1];
+        const user = await db.getSession(token);
+        if (!user) {
+            return res.status(401).json({ error: 'Phiên đăng nhập hết hạn' });
+        }
+        req.user = user;
+        req.token = token;
+        next();
+    } catch (e) {
+        res.status(500).json({ error: 'Lỗi xác thực: ' + e.message });
     }
-    const token = auth.split(' ')[1];
-    const user = db.getSession(token);
-    if (!user) {
-        return res.status(401).json({ error: 'Phiên đăng nhập hết hạn' });
-    }
-    req.user = user;
-    req.token = token;
-    next();
 }
 
 function requireRole(...roles) {
@@ -80,7 +87,7 @@ function requireRole(...roles) {
 // ======================================
 // API: AUTH
 // ======================================
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
     try {
         const { fullName, email, password, inviteCode } = req.body;
         if (!fullName || !email || !password || !inviteCode) {
@@ -89,12 +96,12 @@ app.post('/api/auth/register', (req, res) => {
         if (password.length < 6) {
             return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
         }
-        const currentInviteCode = db.getSetting('admin_invite_code');
+        const currentInviteCode = await db.getSetting('admin_invite_code');
         if (inviteCode !== currentInviteCode) {
             return res.status(403).json({ error: 'Mã xác nhận bảo mật không đúng' });
         }
 
-        const result = db.createUser({ fullName, email, password, role: 'admin' });
+        const result = await db.createUser({ fullName, email, password, role: 'admin' });
         if (result.error) return res.status(400).json({ error: result.error });
         res.status(201).json({ success: true, message: 'Đăng ký Quản Trị Viên thành công!' });
     } catch (e) {
@@ -102,55 +109,56 @@ app.post('/api/auth/register', (req, res) => {
     }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: 'Vui lòng nhập email và mật khẩu' });
         }
-        const user = db.verifyPassword(email, password);
+        const user = await db.verifyPassword(email, password);
         if (!user) {
             return res.status(401).json({ error: 'Email hoặc mật khẩu không đúng' });
         }
-        const token = db.createSession(user.id);
+        const token = await db.createSession(user.id);
         res.json({ token, user });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/auth/logout', authMiddleware, (req, res) => {
+app.post('/api/auth/logout', authMiddleware, async (req, res) => {
     try {
-        db.deleteSession(req.token);
+        await db.deleteSession(req.token);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.get('/api/auth/me', authMiddleware, (req, res) => {
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
     res.json(req.user);
 });
 
 // ======================================
 // API: USERS / PERSONNEL (Quản lý Nhân Sự)
 // ======================================
-app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
+app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
         // Chỉ lấy những tài khoản không phải superadmin để hiển thị trong mục Quản Lý Nhân Sự
-        const users = (req.user.role === 'superadmin') ? db.getAllUsers() : db.getAllUsers().filter(u => u.role !== 'superadmin');
+        const allUsers = await db.getAllUsers();
+        const users = (req.user.role === 'superadmin') ? allUsers : allUsers.filter(u => u.role !== 'superadmin');
         res.json(users);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/users', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
+app.post('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
         const { fullName, email, password, role } = req.body;
         // Quản trị viên chỉ được tạo Nhân viên (staff). Superadmin có thể tạo Quản trị viên (admin).
         const targetRole = (req.user.role === 'admin') ? 'staff' : (role || 'staff');
-        const result = db.createUser({ fullName, email, password: password || '123456', role: targetRole });
+        const result = await db.createUser({ fullName, email, password: password || '123456', role: targetRole });
         if (result.error) return res.status(400).json({ error: result.error });
         broadcast('users_changed');
         res.status(201).json({ id: result.id });
@@ -159,14 +167,12 @@ app.post('/api/users', authMiddleware, requireRole('superadmin', 'admin'), (req,
     }
 });
 
-app.put('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
+app.put('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
         // Cập nhật profile (fullName, role, password)
-        // Lưu ý: role update sẽ được xử lý riêng hoặc gộp ở đây, nhưng db.updateUserProfile chỉ update fullName/password.
-        // Ta cần hỗ trợ update role cho linh hoạt
-        const okProfile = db.updateUserProfile(req.params.id, req.body);
+        const okProfile = await db.updateUserProfile(req.params.id, req.body);
         if (req.body.role && req.user.role === 'superadmin') {
-             db.updateUserRole(req.params.id, req.body.role);
+             await db.updateUserRole(req.params.id, req.body.role);
         }
         if (!okProfile) return res.status(404).json({ error: 'Không tìm thấy' });
         broadcast('users_changed');
@@ -176,14 +182,14 @@ app.put('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), (r
     }
 });
 
-app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), (req, res) => {
+app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
         // Không cho phép admin xóa một admin khác.
-        const targetUser = db.getUserById(req.params.id);
+        const targetUser = await db.getUserById(req.params.id);
         if (req.user.role === 'admin' && targetUser && targetUser.role === 'admin') {
             return res.status(403).json({ error: 'Không thể xóa Quản Trị Viên khác' });
         }
-        const ok = db.deleteUser(req.params.id);
+        const ok = await db.deleteUser(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Không thể xóa' });
         broadcast('users_changed');
         res.json({ success: true });
@@ -195,17 +201,17 @@ app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'),
 // ======================================
 // API: CUSTOMERS (yêu cầu đăng nhập + role admin)
 // ======================================
-app.get('/api/customers', (req, res) => {
+app.get('/api/customers', async (req, res) => {
     try {
-        res.json(db.getAllCustomers());
+        res.json(await db.getAllCustomers());
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/customers', (req, res) => {
+app.post('/api/customers', async (req, res) => {
     try {
-        const id = db.addCustomer(req.body);
+        const id = await db.addCustomer(req.body);
         broadcast('customers_changed');
         res.status(201).json({ id });
     } catch (e) {
@@ -213,9 +219,9 @@ app.post('/api/customers', (req, res) => {
     }
 });
 
-app.put('/api/customers/:id', (req, res) => {
+app.put('/api/customers/:id', async (req, res) => {
     try {
-        const ok = db.updateCustomer(req.params.id, req.body);
+        const ok = await db.updateCustomer(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('customers_changed');
         res.json({ success: true });
@@ -224,9 +230,9 @@ app.put('/api/customers/:id', (req, res) => {
     }
 });
 
-app.delete('/api/customers/:id', (req, res) => {
+app.delete('/api/customers/:id', async (req, res) => {
     try {
-        const ok = db.deleteCustomer(req.params.id);
+        const ok = await db.deleteCustomer(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('customers_changed');
         res.json({ success: true });
@@ -238,29 +244,38 @@ app.delete('/api/customers/:id', (req, res) => {
 // ======================================
 // API: CÀI ĐẶT (SETTINGS)
 // ======================================
-app.get('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), (req, res) => {
-    res.json({ code: db.getSetting('admin_invite_code') });
+app.get('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    res.json({ code: await db.getSetting('admin_invite_code') });
 });
 
-app.post('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), (req, res) => {
-    const code = db.generateInviteCode();
+app.post('/api/settings/invite-code', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    const code = await db.generateInviteCode();
     res.json({ code });
 });
 
-// ======================================
-// API: SERVICES
-// ======================================
-app.get('/api/services', (req, res) => {
+// API: Database Info (chỉ superadmin)
+app.get('/api/db-info', authMiddleware, requireRole('superadmin'), async (req, res) => {
     try {
-        res.json(db.getAllServices());
+        res.json(await db.getDatabaseInfo());
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/services', (req, res) => {
+// ======================================
+// API: SERVICES
+// ======================================
+app.get('/api/services', async (req, res) => {
     try {
-        const id = db.addService(req.body);
+        res.json(await db.getAllServices());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/services', async (req, res) => {
+    try {
+        const id = await db.addService(req.body);
         broadcast('services_changed');
         res.status(201).json({ id });
     } catch (e) {
@@ -268,9 +283,9 @@ app.post('/api/services', (req, res) => {
     }
 });
 
-app.put('/api/services/:id', (req, res) => {
+app.put('/api/services/:id', async (req, res) => {
     try {
-        const ok = db.updateService(req.params.id, req.body);
+        const ok = await db.updateService(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('services_changed');
         res.json({ success: true });
@@ -279,9 +294,9 @@ app.put('/api/services/:id', (req, res) => {
     }
 });
 
-app.delete('/api/services/:id', (req, res) => {
+app.delete('/api/services/:id', async (req, res) => {
     try {
-        const ok = db.deleteService(req.params.id);
+        const ok = await db.deleteService(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('services_changed');
         res.json({ success: true });
@@ -293,17 +308,17 @@ app.delete('/api/services/:id', (req, res) => {
 // ======================================
 // API: NOTIFICATIONS
 // ======================================
-app.get('/api/notifications', (req, res) => {
+app.get('/api/notifications', async (req, res) => {
     try {
-        res.json(db.getAllNotifications());
+        res.json(await db.getAllNotifications());
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/notifications', (req, res) => {
+app.post('/api/notifications', async (req, res) => {
     try {
-        const id = db.addNotification(req.body);
+        const id = await db.addNotification(req.body);
         broadcast('notifications_changed');
         res.status(201).json({ id });
     } catch (e) {
@@ -311,9 +326,9 @@ app.post('/api/notifications', (req, res) => {
     }
 });
 
-app.put('/api/notifications/:id', (req, res) => {
+app.put('/api/notifications/:id', async (req, res) => {
     try {
-        const ok = db.updateNotification(req.params.id, req.body);
+        const ok = await db.updateNotification(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('notifications_changed');
         res.json({ success: true });
@@ -323,13 +338,13 @@ app.put('/api/notifications/:id', (req, res) => {
 });
 
 // ======================================
-// KHỞI ĐỘNG SERVER (async vì sql.js cần init)
+// KHỞI ĐỘNG SERVER (async vì database cần init)
 // ======================================
 async function startServer() {
     try {
-        // Khởi tạo database
+        // Khởi tạo database (auto-detect Turso hoặc Local)
         await db.initDatabase();
-        console.log('✅ Database SQLite đã sẵn sàng!');
+        console.log('✅ Database đã sẵn sàng!');
 
         // Start Express
         app.listen(PORT, () => {
@@ -338,7 +353,11 @@ async function startServer() {
             console.log('║   🚀 AISHOP Dashboard Server Started!   ║');
             console.log('╠══════════════════════════════════════════╣');
             console.log(`║   🌐 http://localhost:${PORT}              ║`);
-            console.log('║   📁 Database: server/data.db            ║');
+            if (db.mode === 'turso') {
+                console.log('║   ☁️  Database: Turso Cloud              ║');
+            } else {
+                console.log('║   📁 Database: server/data.db (local)    ║');
+            }
             console.log('║   🔄 SSE Real-time: Enabled              ║');
             console.log('╚══════════════════════════════════════════╝');
             console.log('');

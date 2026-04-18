@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 *.log
 .env
+
+# Database local (không push lên GitHub)
+server/data.db
+server/data.db.backup
