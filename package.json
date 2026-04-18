@@ -1,0 +1,17 @@
+{
+  "name": "aishop-dashboard",
+  "version": "1.0.0",
+  "description": "AI Customer Management Dashboard with Node.js Backend",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "sql.js": "^1.11.0",
+    "uuid": "^10.0.0"
+  }
+}
+
