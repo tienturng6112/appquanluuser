@@ -213,8 +213,8 @@ app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'),
 app.get('/api/customers', authMiddleware, async (req, res) => {
     try {
         if (req.user.role === 'superadmin') {
-            // Superadmin: xem tất cả hoặc filter theo ownerId
-            const ownerId = req.query.ownerId || null;
+            // Superadmin: mặc định xem của mình, hoặc xem của người khác nếu có ownerId
+            const ownerId = req.query.ownerId || req.user.id;
             res.json(await db.getAllCustomers(ownerId));
         } else {
             // Admin/Staff: chỉ xem khách hàng của mình
@@ -297,7 +297,8 @@ app.get('/api/db-info', authMiddleware, requireRole('superadmin'), async (req, r
 app.get('/api/services', authMiddleware, async (req, res) => {
     try {
         if (req.user.role === 'superadmin') {
-            const ownerId = req.query.ownerId || null;
+            // Superadmin: xem dịch vụ của mình hoặc của người khác
+            const ownerId = req.query.ownerId || req.user.id;
             res.json(await db.getAllServices(ownerId));
         } else {
             res.json(await db.getAllServices(req.user.id));
