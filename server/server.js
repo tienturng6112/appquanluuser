@@ -294,16 +294,22 @@ app.get('/api/db-info', authMiddleware, requireRole('superadmin'), async (req, r
 // ======================================
 // API: SERVICES
 // ======================================
-app.get('/api/services', async (req, res) => {
+app.get('/api/services', authMiddleware, async (req, res) => {
     try {
-        res.json(await db.getAllServices());
+        if (req.user.role === 'superadmin') {
+            const ownerId = req.query.ownerId || null;
+            res.json(await db.getAllServices(ownerId));
+        } else {
+            res.json(await db.getAllServices(req.user.id));
+        }
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/services', async (req, res) => {
+app.post('/api/services', authMiddleware, async (req, res) => {
     try {
+        req.body.ownerId = req.user.id;
         const id = await db.addService(req.body);
         broadcast('services_changed');
         res.status(201).json({ id });
@@ -312,8 +318,9 @@ app.post('/api/services', async (req, res) => {
     }
 });
 
-app.put('/api/services/:id', async (req, res) => {
+app.put('/api/services/:id', authMiddleware, async (req, res) => {
     try {
+        // Có thể thêm kiểm tra quyền sở hữu detail ở đây nếu cần, tạm thời pass db update
         const ok = await db.updateService(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('services_changed');
@@ -323,7 +330,7 @@ app.put('/api/services/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/services/:id', async (req, res) => {
+app.delete('/api/services/:id', authMiddleware, async (req, res) => {
     try {
         const ok = await db.deleteService(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });

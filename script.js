@@ -256,7 +256,7 @@ function setupSSE() {
                 updateStatCards();
             }
             if (msg.type === 'services_changed') {
-                cachedServices = await apiGet('/services');
+                await reloadServices();
                 buildServiceSidebar();
                 updateServiceSelects();
                 if (currentView === 'services') renderServices();
@@ -304,13 +304,19 @@ async function reloadCustomers() {
     cachedCustomers = await apiGet(`/customers${params}`);
 }
 
+async function reloadServices() {
+    const params = viewingOwnerId ? `?ownerId=${viewingOwnerId}` : '';
+    cachedServices = await apiGet(`/services${params}`);
+}
+
 // Superadmin click vào QTV để xem khách hàng của họ
 window.viewAdminCustomers = async function(adminId, adminName) {
     viewingOwnerId = adminId;
     viewingOwnerName = adminName;
     
-    showToast(`⏳ Đang tải khách hàng của ${adminName}...`);
+    showToast(`⏳ Đang tải dữ liệu của ${adminName}...`);
     await reloadCustomers();
+    await reloadServices();
     
     // Chuyển sang view khách hàng
     currentView = 'home';
@@ -333,6 +339,7 @@ window.backToMyCustomers = async function() {
     viewingOwnerName = '';
     
     await reloadCustomers();
+    await reloadServices();
     mainTitle.textContent = 'Tất Cả Khách Hàng';
     renderTable(searchInput.value);
     updateExpiringBadge();
@@ -1059,8 +1066,8 @@ async function init() {
 
         // Tải dữ liệu ban đầu (auto-filter theo ownership)
         await reloadCustomers();
+        await reloadServices();
         cachedPersonnel = await apiGet('/users');
-        cachedServices = await apiGet('/services');
         cachedNotifications = await apiGet('/notifications');
 
         // Render

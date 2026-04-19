@@ -122,7 +122,8 @@ async function createTables() {
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             icon TEXT DEFAULT 'ph-cube',
-            color TEXT DEFAULT '#6366f1'
+            color TEXT DEFAULT '#6366f1',
+            ownerId TEXT DEFAULT ''
         )`,
         `CREATE TABLE IF NOT EXISTS notifications (
             id TEXT PRIMARY KEY,
@@ -169,7 +170,8 @@ async function createTables() {
 async function migrateDatabase() {
     const migrations = [
         "ALTER TABLE customers ADD COLUMN ownerId TEXT DEFAULT ''",
-        "ALTER TABLE users ADD COLUMN createdBy TEXT DEFAULT ''"
+        "ALTER TABLE users ADD COLUMN createdBy TEXT DEFAULT ''",
+        "ALTER TABLE services ADD COLUMN ownerId TEXT DEFAULT ''"
     ];
     for (const sql of migrations) {
         try { await execute(sql); console.log('✅ Migration:', sql); }
@@ -391,14 +393,17 @@ async function deleteAdmin(id) {
 // ======================================
 // SERVICES
 // ======================================
-async function getAllServices() {
+async function getAllServices(ownerId = null) {
+    if (ownerId) {
+        return await queryAll('SELECT * FROM services WHERE ownerId = ?', [ownerId]);
+    }
     return await queryAll('SELECT * FROM services');
 }
 
 async function addService(data) {
     const id = uuidv4();
-    await execute('INSERT INTO services (id, name, icon, color) VALUES (?, ?, ?, ?)',
-        [id, data.name || '', data.icon || 'ph-cube', data.color || '#6366f1']);
+    await execute('INSERT INTO services (id, name, icon, color, ownerId) VALUES (?, ?, ?, ?, ?)',
+        [id, data.name || '', data.icon || 'ph-cube', data.color || '#6366f1', data.ownerId || '']);
     return id;
 }
 
@@ -559,16 +564,24 @@ async function seedIfEmpty() {
         console.log('✅ Admin Minh: admin@aishop.com / admin123');
     }
 
-    // Seed services nếu chưa có
+    // Gán ownerId cho các services cũ
+    if (superAdmin) {
+        await execute(
+            "UPDATE services SET ownerId = ? WHERE ownerId = '' OR ownerId IS NULL",
+            [superAdmin.id]
+        );
+    }
+
+    // Seed services nếu chưa có (gán cho superadmin)
     const svcCount = await queryOne('SELECT COUNT(*) as cnt FROM services');
-    if (svcCount.cnt === 0) {
+    if (svcCount.cnt === 0 && superAdmin) {
         console.log('📦 Đang tạo dữ liệu dịch vụ mẫu...');
-        await addService({ name: 'ChatGPT Plus', icon: 'ph-robot', color: '#10a37f' });
-        await addService({ name: 'Canva Pro', icon: 'ph-paint-brush-broad', color: '#00c4cc' });
-        await addService({ name: 'Adobe Creative Cloud', icon: 'ph-swatches', color: '#ff0000' });
-        await addService({ name: 'Netflix Premium', icon: 'ph-video-camera', color: '#e50914' });
-        await addService({ name: 'Midjourney', icon: 'ph-sailboat', color: '#7c3aed' });
-        await addService({ name: 'Khác', icon: 'ph-atom', color: '#6366f1' });
+        await addService({ name: 'ChatGPT Plus', icon: 'ph-robot', color: '#10a37f', ownerId: superAdmin.id });
+        await addService({ name: 'Canva Pro', icon: 'ph-paint-brush-broad', color: '#00c4cc', ownerId: superAdmin.id });
+        await addService({ name: 'Adobe Creative Cloud', icon: 'ph-swatches', color: '#ff0000', ownerId: superAdmin.id });
+        await addService({ name: 'Netflix Premium', icon: 'ph-video-camera', color: '#e50914', ownerId: superAdmin.id });
+        await addService({ name: 'Midjourney', icon: 'ph-sailboat', color: '#7c3aed', ownerId: superAdmin.id });
+        await addService({ name: 'Khác', icon: 'ph-atom', color: '#6366f1', ownerId: superAdmin.id });
         console.log('✅ Dữ liệu dịch vụ mẫu đã tạo xong!');
     }
 
