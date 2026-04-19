@@ -1039,13 +1039,23 @@ const MAX_INIT_RETRIES = 5;
 
 async function init() {
     try {
-        applyRolePermissions();
-        
         if (initRetries === 0) {
             showToast("⏳ Đang kết nối Server...");
         } else {
             showToast(`⏳ Server đang khởi động... (lần ${initRetries})`);
         }
+
+        // Cập nhật lại role và thông tin mới nhất từ server
+        try {
+            const serverUser = await apiGet('/auth/me');
+            if (serverUser && !serverUser.error) {
+                currentUser = serverUser;
+                localStorage.setItem('aishop_user', JSON.stringify(currentUser));
+            }
+        } catch (e) { console.warn("Lấy auth/me thất bại", e); }
+        
+        // Phân quyền sau khi đã cập nhật bộ nhớ
+        applyRolePermissions();
 
         // Tải dữ liệu ban đầu (auto-filter theo ownership)
         await reloadCustomers();
