@@ -942,8 +942,8 @@ function applyRolePermissions() {
         };
     }
     
-    // Nếu là user/staff, ẩn các tính năng quản trị
-    if (currentUser.role === 'user' || currentUser.role === 'staff') {
+    // Ẩn Sidebar Quản lý Nhân sự & Dịch vụ đối với tất cả trừ superadmin
+    if (currentUser.role !== 'superadmin') {
         const navItems = document.querySelectorAll('.nav-links > li');
         navItems.forEach(li => {
             if (li.getAttribute('onclick') === "switchView('admins', this)") li.style.display = 'none';
