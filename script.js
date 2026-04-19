@@ -949,12 +949,11 @@ function applyRolePermissions() {
         };
     }
     
-    // Ẩn Sidebar Quản lý Nhân sự & Dịch vụ đối với tất cả trừ superadmin
+    // Ẩn Sidebar Quản lý Nhân sự đối với tất cả trừ superadmin
     if (currentUser.role !== 'superadmin') {
         const navItems = document.querySelectorAll('.nav-links > li');
         navItems.forEach(li => {
             if (li.getAttribute('onclick') === "switchView('admins', this)") li.style.display = 'none';
-            if (li.getAttribute('onclick') === "switchView('services', this)") li.style.display = 'none';
         });
     }
 
