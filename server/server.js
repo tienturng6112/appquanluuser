@@ -144,10 +144,15 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 // ======================================
 app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
-        // Chỉ lấy những tài khoản không phải superadmin để hiển thị trong mục Quản Lý Nhân Sự
-        const allUsers = await db.getAllUsers();
-        const users = (req.user.role === 'superadmin') ? allUsers : allUsers.filter(u => u.role !== 'superadmin');
-        res.json(users);
+        if (req.user.role === 'superadmin') {
+            // Superadmin xem tất cả (trừ chính mình)
+            const allUsers = await db.getAllUsers();
+            res.json(allUsers.filter(u => u.id !== req.user.id));
+        } else {
+            // Admin chỉ xem nhân sự mình tạo
+            const users = await db.getAllUsers(req.user.id);
+            res.json(users);
+        }
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -156,9 +161,13 @@ app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async 
 app.post('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     try {
         const { fullName, email, password, role } = req.body;
-        // Quản trị viên chỉ được tạo Nhân viên (staff). Superadmin có thể tạo Quản trị viên (admin).
         const targetRole = (req.user.role === 'admin') ? 'staff' : (role || 'staff');
-        const result = await db.createUser({ fullName, email, password: password || '123456', role: targetRole });
+        const result = await db.createUser({
+            fullName, email,
+            password: password || '123456',
+            role: targetRole,
+            createdBy: req.user.id
+        });
         if (result.error) return res.status(400).json({ error: result.error });
         broadcast('users_changed');
         res.status(201).json({ id: result.id });
@@ -199,18 +208,27 @@ app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'),
 });
 
 // ======================================
-// API: CUSTOMERS (yêu cầu đăng nhập + role admin)
+// API: CUSTOMERS (yêu cầu đăng nhập + phân tách dữ liệu)
 // ======================================
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', authMiddleware, async (req, res) => {
     try {
-        res.json(await db.getAllCustomers());
+        if (req.user.role === 'superadmin') {
+            // Superadmin: xem tất cả hoặc filter theo ownerId
+            const ownerId = req.query.ownerId || null;
+            res.json(await db.getAllCustomers(ownerId));
+        } else {
+            // Admin/Staff: chỉ xem khách hàng của mình
+            res.json(await db.getAllCustomers(req.user.id));
+        }
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', authMiddleware, async (req, res) => {
     try {
+        // Tự động gán ownerId = người đang đăng nhập
+        req.body.ownerId = req.user.id;
         const id = await db.addCustomer(req.body);
         broadcast('customers_changed');
         res.status(201).json({ id });
@@ -219,8 +237,14 @@ app.post('/api/customers', async (req, res) => {
     }
 });
 
-app.put('/api/customers/:id', async (req, res) => {
+app.put('/api/customers/:id', authMiddleware, async (req, res) => {
     try {
+        // Kiểm tra quyền sở hữu
+        const customer = await db.getCustomer(req.params.id);
+        if (!customer) return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'superadmin' && customer.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Không có quyền chỉnh sửa' });
+        }
         const ok = await db.updateCustomer(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('customers_changed');
@@ -230,8 +254,13 @@ app.put('/api/customers/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/customers/:id', async (req, res) => {
+app.delete('/api/customers/:id', authMiddleware, async (req, res) => {
     try {
+        const customer = await db.getCustomer(req.params.id);
+        if (!customer) return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'superadmin' && customer.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Không có quyền xóa' });
+        }
         const ok = await db.deleteCustomer(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('customers_changed');

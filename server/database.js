@@ -88,6 +88,7 @@ async function initDatabase() {
     }
 
     await initSettings();
+    await migrateDatabase();
     await seedIfEmpty();
 
     return true;
@@ -109,7 +110,8 @@ async function createTables() {
             startDate TEXT DEFAULT '',
             endDate TEXT DEFAULT '',
             isEmailSent INTEGER DEFAULT 0,
-            isNotifGenerated INTEGER DEFAULT 0
+            isNotifGenerated INTEGER DEFAULT 0,
+            ownerId TEXT DEFAULT ''
         )`,
         `CREATE TABLE IF NOT EXISTS admins (
             id TEXT PRIMARY KEY,
@@ -136,7 +138,8 @@ async function createTables() {
             email TEXT UNIQUE NOT NULL,
             passwordHash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
-            createdAt TEXT DEFAULT ''
+            createdAt TEXT DEFAULT '',
+            createdBy TEXT DEFAULT ''
         )`,
         `CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
@@ -157,6 +160,29 @@ async function createTables() {
         for (const sql of tableStatements) {
             localDb.run(sql);
         }
+    }
+}
+
+// ======================================
+// MIGRATION — Thêm cột mới cho database cũ
+// ======================================
+async function migrateDatabase() {
+    const migrations = [
+        "ALTER TABLE customers ADD COLUMN ownerId TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN createdBy TEXT DEFAULT ''"
+    ];
+    for (const sql of migrations) {
+        try { await execute(sql); console.log('✅ Migration:', sql); }
+        catch (e) { /* Column already exists, skip */ }
+    }
+
+    // Gán khách hàng cũ (chưa có ownerId) cho superadmin
+    const superAdmin = await queryOne("SELECT id FROM users WHERE role = 'superadmin'");
+    if (superAdmin) {
+        await execute(
+            "UPDATE customers SET ownerId = ? WHERE ownerId = '' OR ownerId IS NULL",
+            [superAdmin.id]
+        );
     }
 }
 
@@ -262,7 +288,10 @@ async function initSettings() {
 // ======================================
 // CUSTOMERS
 // ======================================
-async function getAllCustomers() {
+async function getAllCustomers(ownerId = null) {
+    if (ownerId) {
+        return (await queryAll('SELECT * FROM customers WHERE ownerId = ?', [ownerId])).map(formatCustomer);
+    }
     return (await queryAll('SELECT * FROM customers')).map(formatCustomer);
 }
 
@@ -274,11 +303,11 @@ async function getCustomer(id) {
 async function addCustomer(data) {
     const id = uuidv4();
     await execute(
-        `INSERT INTO customers (id, name, phone, service, adminId, email, password, startDate, endDate, isEmailSent, isNotifGenerated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO customers (id, name, phone, service, adminId, email, password, startDate, endDate, isEmailSent, isNotifGenerated, ownerId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, data.name || '', data.phone || '', data.service || '', data.adminId || '',
          data.email || '', data.password || '', data.startDate || '', data.endDate || '',
-         data.isEmailSent ? 1 : 0, data.isNotifGenerated ? 1 : 0]
+         data.isEmailSent ? 1 : 0, data.isNotifGenerated ? 1 : 0, data.ownerId || '']
     );
     return id;
 }
@@ -439,8 +468,8 @@ async function createUser(data) {
     if (existing) return { error: 'Email đã tồn tại' };
     const id = uuidv4();
     await execute(
-        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', new Date().toISOString()]
+        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', new Date().toISOString(), data.createdBy || '']
     );
     return { id };
 }
@@ -455,8 +484,11 @@ async function getUserById(id) {
     return u;
 }
 
-async function getAllUsers() {
-    return await queryAll('SELECT id, fullName, email, role, createdAt FROM users');
+async function getAllUsers(createdBy = null) {
+    if (createdBy) {
+        return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy FROM users WHERE createdBy = ?', [createdBy]);
+    }
+    return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy FROM users');
 }
 
 async function updateUserRole(id, role) {

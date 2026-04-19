@@ -89,6 +89,10 @@ document.addEventListener('click', function unlockAudio() {
 let cachedCustomers = [], cachedPersonnel = [], cachedNotifications = [], cachedServices = [];
 let currentFilterService = '', currentView = 'home';
 
+// Multi-tenant: đang xem khách hàng của ai
+let viewingOwnerId = null; // null = xem của mình, string = xem của admin khác
+let viewingOwnerName = '';
+
 // DOM
 const tableBody = document.getElementById('tableBody');
 const adminTableBody = document.getElementById('adminTableBody');
@@ -240,7 +244,7 @@ function setupSSE() {
         try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'customers_changed') {
-                cachedCustomers = await apiGet('/customers');
+                await reloadCustomers();
                 if (currentView !== 'admins' && currentView !== 'services') renderTable(searchInput.value);
                 if (currentView === 'services') renderServices();
                 updateExpiringBadge();
@@ -293,6 +297,50 @@ function startPolling() {
 }
 
 // ======================================
+// MULTI-TENANT: Xem khách hàng theo chủ sở hữu
+// ======================================
+async function reloadCustomers() {
+    const params = viewingOwnerId ? `?ownerId=${viewingOwnerId}` : '';
+    cachedCustomers = await apiGet(`/customers${params}`);
+}
+
+// Superadmin click vào QTV để xem khách hàng của họ
+window.viewAdminCustomers = async function(adminId, adminName) {
+    viewingOwnerId = adminId;
+    viewingOwnerName = adminName;
+    
+    showToast(`⏳ Đang tải khách hàng của ${adminName}...`);
+    await reloadCustomers();
+    
+    // Chuyển sang view khách hàng
+    currentView = 'home';
+    currentFilterService = '';
+    document.getElementById('viewCustomers').classList.add('active');
+    document.getElementById('viewAdmins').classList.remove('active');
+    document.getElementById('viewServices').classList.remove('active');
+    
+    mainTitle.innerHTML = `<i class="ph ph-arrow-left" style="cursor:pointer;margin-right:8px;" onclick="backToMyCustomers()" title="Quay lại"></i> Khách hàng của: <span style="color:var(--primary)">${adminName}</span>`;
+    
+    renderTable(searchInput.value);
+    updateExpiringBadge();
+    updateStatCards();
+    showToast(`✅ Đang xem ${cachedCustomers.length} khách hàng của ${adminName}`);
+}
+
+// Quay về xem khách hàng của mình
+window.backToMyCustomers = async function() {
+    viewingOwnerId = null;
+    viewingOwnerName = '';
+    
+    await reloadCustomers();
+    mainTitle.textContent = 'Tất Cả Khách Hàng';
+    renderTable(searchInput.value);
+    updateExpiringBadge();
+    updateStatCards();
+    showToast('✅ Đã quay về khách hàng của bạn');
+}
+
+// ======================================
 // HELPERS
 // ======================================
 function calculateDaysLeft(endDateStr) {
@@ -323,6 +371,8 @@ window.switchView = function (view, el) {
     else {
         document.getElementById('viewCustomers').classList.add('active');
         currentFilterService = '';
+        // Reset về khách hàng của mình khi chuyển view
+        if (viewingOwnerId) backToMyCustomers();
         if (view === 'home') mainTitle.textContent = "Tất Cả Khách Hàng";
         if (view === 'expiring') mainTitle.textContent = "Tài Khoản Gần Hết Hạn (<5 Ngày)";
         renderTable(searchInput.value);
@@ -410,10 +460,18 @@ function renderPersonnel() {
         else if (a.role === 'admin') roleLabel = '<span class="badge warning">Quản Trị Viên</span>';
         else roleLabel = '<span class="badge safe">Nhân Viên</span>';
         const tr = document.createElement('tr');
+        
+        // Nút xem khách hàng (chỉ superadmin mới thấy)
+        let viewCustBtn = '';
+        if (currentUser && currentUser.role === 'superadmin') {
+            viewCustBtn = `<button class="btn-icon" onclick="viewAdminCustomers('${a.id}', '${a.fullName.replace(/'/g, "\\'")}')" title="Xem khách hàng" style="color:var(--primary);"><i class="ph ph-users-three"></i></button>`;
+        }
+        
         tr.innerHTML = `
             <td>${roleLabel}</td>
             <td><strong>${a.fullName}</strong></td><td>${a.email}</td>
             <td class="action-btns">
+                ${viewCustBtn}
                 <button class="btn-icon" onclick="editUser('${a.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
                 <button class="btn-icon delete" onclick="deleteUser('${a.id}')" title="Xoá"><i class="ph ph-trash"></i></button>
             </td>`;
@@ -925,8 +983,8 @@ async function init() {
             showToast(`⏳ Server đang khởi động... (lần ${initRetries})`);
         }
 
-        // Tải dữ liệu ban đầu (apiGet giờ đã có auth headers)
-        cachedCustomers = await apiGet('/customers');
+        // Tải dữ liệu ban đầu (auto-filter theo ownership)
+        await reloadCustomers();
         cachedPersonnel = await apiGet('/users');
         cachedServices = await apiGet('/services');
         cachedNotifications = await apiGet('/notifications');
