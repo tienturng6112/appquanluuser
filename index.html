@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 
 <body>
@@ -135,7 +136,10 @@
 
                 <div class="actions-bar">
                     <h1 class="page-title" id="mainTitle">Danh Sách Khách Hàng</h1>
-                    <button class="btn-primary" id="addBtn"><i class="ph ph-plus"></i> Thêm Khách Hàng</button>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn-secondary" id="exportExcelBtn" style="border-color: #10b981; color: #10b981;"><i class="ph ph-file-xls"></i> Xuất Excel</button>
+                        <button class="btn-primary" id="addBtn"><i class="ph ph-plus"></i> Thêm Khách Hàng</button>
+                    </div>
                 </div>
                 <div class="table-container glass-panel">
                     <table id="customerTable">

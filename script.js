@@ -669,6 +669,62 @@ window.showToast = function (msg) {
 // ======================================
 // FORMS: CUSTOMER
 // ======================================
+// Export Excel (Khách hàng)
+document.getElementById('exportExcelBtn').addEventListener('click', () => {
+    if (!cachedCustomers.length) return showToast("⚠️ Không có dữ liệu để xuất");
+    
+    // Lấy dữ liệu đang hiển thị trên bảng
+    const searchTerm = searchInput.value.toLowerCase();
+    let filtered = cachedCustomers.filter(c =>
+        c.phone.includes(searchTerm) || c.name.toLowerCase().includes(searchTerm)
+    );
+    if (currentFilterService) filtered = filtered.filter(c => c.service === currentFilterService);
+    if (currentView === 'expiring') filtered = filtered.filter(c => calculateDaysLeft(c.endDate) <= 5);
+
+    const data = filtered.map(c => {
+        const adminName = cachedPersonnel.find(a => a.id == c.adminId)?.fullName || "N/A";
+        const dl = calculateDaysLeft(c.endDate);
+        const status = dl < 0 ? "Đã hết hạn" : (dl <= 5 ? "Sắp hết hạn" : "Đang hoạt động");
+        
+        return {
+            "Tên Khách Hàng": c.name,
+            "Số Điện Thoại": c.phone,
+            "Quản Lý Bằng": adminName,
+            "Dịch Vụ": c.service,
+            "Tài Khoản (Email)": c.email,
+            "Mật Khẩu": c.password,
+            "Ngày Bắt Đầu": formatDate(c.startDate),
+            "Ngày Hết Hạn": formatDate(c.endDate),
+            "Trạng Thái": status
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    
+    // Auto fit columns
+    const wscols = [
+        {wch: 25}, // Tên
+        {wch: 15}, // SĐT
+        {wch: 20}, // Quản lý bở
+        {wch: 20}, // Dịch vụ
+        {wch: 30}, // Email
+        {wch: 15}, // Pass
+        {wch: 15}, // Start
+        {wch: 15}, // End
+        {wch: 20}  // Status
+    ];
+    worksheet['!cols'] = wscols;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "KhachHang");
+    
+    const ownerSuffix = viewingOwnerName ? `_${viewingOwnerName}` : '';
+    const dateStr = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(workbook, `Danh_Sach_Khach_Hang${ownerSuffix}_${dateStr}.xlsx`);
+    
+    showToast(`✅ Đã xuất ${filtered.length} khách hàng!`);
+});
+
 document.getElementById('addBtn').addEventListener('click', () => {
     updateAdminSelects();
     document.getElementById('modalTitle').textContent = "Thêm Khách Hàng";
@@ -899,6 +955,14 @@ function applyRolePermissions() {
         const superadminSettings = document.getElementById('superadminSettings');
         if (superadminSettings) superadminSettings.style.display = 'block';
         fetchInviteCode();
+    } else {
+        // Ẩn nút Thêm Nhân Sự đối với Quản trị viên thường
+        const adminBtn = document.getElementById('addAdminBtn');
+        if (adminBtn) adminBtn.style.display = 'none';
+        
+        // Chắc chắn ẩn mục Settings (Đổi mã)
+        const superadminSettings = document.getElementById('superadminSettings');
+        if (superadminSettings) superadminSettings.style.display = 'none';
     }
 }
 
