@@ -910,12 +910,20 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
 });
 
 // ======================================
-// KHỞI ĐỘNG
+// KHỞI ĐỘNG — có retry cho Render cold start
 // ======================================
+let initRetries = 0;
+const MAX_INIT_RETRIES = 5;
+
 async function init() {
     try {
         applyRolePermissions();
-        showToast("⏳ Đang kết nối Server...");
+        
+        if (initRetries === 0) {
+            showToast("⏳ Đang kết nối Server...");
+        } else {
+            showToast(`⏳ Server đang khởi động... (lần ${initRetries})`);
+        }
 
         // Tải dữ liệu ban đầu (apiGet giờ đã có auth headers)
         cachedCustomers = await apiGet('/customers');
@@ -951,10 +959,28 @@ async function init() {
             processAutomatedEmails();
         }, 500);
 
+        initRetries = 0;
         showToast("✅ Kết nối Server thành công!");
     } catch (err) {
         console.error("❌ Lỗi:", err);
-        showToast("❌ Lỗi kết nối Server: " + err.message);
+        
+        // Kiểm tra nếu lỗi 401 (token hết hạn) → chuyển về login
+        if (err.message && err.message.includes('401')) {
+            localStorage.removeItem('aishop_token');
+            localStorage.removeItem('aishop_user');
+            window.location.href = 'login.html';
+            return;
+        }
+        
+        // Server đang ngủ (Render cold start) → retry
+        initRetries++;
+        if (initRetries <= MAX_INIT_RETRIES) {
+            const delay = Math.min(initRetries * 3000, 15000); // 3s, 6s, 9s, 12s, 15s
+            showToast(`⏳ Server đang khởi động... tự thử lại sau ${delay/1000}s`);
+            setTimeout(() => init(), delay);
+        } else {
+            showToast("❌ Không thể kết nối Server. Hãy tải lại trang.");
+        }
     }
 }
 

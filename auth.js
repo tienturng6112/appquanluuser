@@ -9,14 +9,14 @@ if (window.location.protocol === 'file:' || (window.location.hostname === 'local
 let currentLoginAs = 'admin'; // 'admin' hoặc 'user'
 
 // Kiểm tra nếu đã đăng nhập → redirect
+// Chống redirect loop khi server Render đang cold start
 (function checkAuth() {
     const token = localStorage.getItem('aishop_token');
-    if (token) {
-        fetch(`${API_BASE}/auth/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        }).then(r => {
-            if (r.ok) window.location.href = 'index.html';
-        }).catch(() => {});
+    const user = localStorage.getItem('aishop_user');
+    if (token && user) {
+        // Có token + user trong localStorage → redirect ngay, không cần gọi API
+        // (API sẽ verify token khi index.html load)
+        window.location.href = 'index.html';
     }
 })();
 
