@@ -210,11 +210,33 @@ async function fsDeleteService(id) {
 
 // ======================================
 // SSE REAL-TIME (thay thế onSnapshot)
+// Smart reconnect cho Render free tier
 // ======================================
-function setupSSE() {
-    const eventSource = new EventSource(`${API_BASE}/events`);
+let sseInstance = null;
+let sseRetryDelay = 1000; // Bắt đầu 1s
+const SSE_MAX_DELAY = 30000; // Tối đa 30s
+const SSE_RESET_DELAY = 1000; // Reset về 1s khi kết nối thành công
 
-    eventSource.onmessage = async (event) => {
+function setupSSE() {
+    if (sseInstance) {
+        sseInstance.close();
+        sseInstance = null;
+    }
+
+    try {
+        sseInstance = new EventSource(`${API_BASE}/events`);
+    } catch (e) {
+        console.warn('SSE không khả dụng, dùng polling thay thế');
+        startPolling();
+        return;
+    }
+
+    sseInstance.onopen = () => {
+        console.log('✅ SSE connected');
+        sseRetryDelay = SSE_RESET_DELAY; // Reset delay khi kết nối thành công
+    };
+
+    sseInstance.onmessage = async (event) => {
         try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'customers_changed') {
@@ -240,12 +262,34 @@ function setupSSE() {
                 cachedNotifications = await apiGet('/notifications');
                 renderNotifications();
             }
-        } catch (e) { console.error('SSE error:', e); }
+        } catch (e) { console.error('SSE message error:', e); }
     };
 
-    eventSource.onerror = () => {
-        console.warn('⚠ SSE mất kết nối, thử kết nối lại...');
+    sseInstance.onerror = () => {
+        // Đóng kết nối lỗi, tự reconnect sau delay (exponential backoff)
+        if (sseInstance) sseInstance.close();
+        sseInstance = null;
+        console.warn(`⚠ SSE mất kết nối, thử lại sau ${sseRetryDelay / 1000}s...`);
+        setTimeout(() => setupSSE(), sseRetryDelay);
+        sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_DELAY);
     };
+}
+
+// Fallback polling khi SSE không hoạt động (mỗi 30s)
+let pollingTimer = null;
+function startPolling() {
+    if (pollingTimer) return;
+    pollingTimer = setInterval(async () => {
+        try {
+            cachedCustomers = await apiGet('/customers');
+            cachedPersonnel = await apiGet('/users');
+            cachedServices = await apiGet('/services');
+            cachedNotifications = await apiGet('/notifications');
+            renderTable(searchInput.value);
+            updateStatCards();
+            renderNotifications();
+        } catch (e) { /* Server đang ngủ, bỏ qua */ }
+    }, 30000);
 }
 
 // ======================================
