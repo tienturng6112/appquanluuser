@@ -27,6 +27,135 @@ try {
 // Nếu chưa có user thì chuyển về trang đăng nhập
 if (!currentUser) {
     window.location.href = 'login.html';
+} else {
+    let globalCustomVoiceStr = null;
+
+    window.loadVoiceSettings = async function() {
+        try {
+            const res = await apiGet('/settings/voice');
+            if (res.enabled !== undefined) {
+                document.getElementById('voiceToggleCheckbox').checked = res.enabled;
+            }
+            const customRes = await apiGet('/settings/voice/custom');
+            globalCustomVoiceStr = customRes.audioData;
+            
+            const rmBtn = document.getElementById('removeVoiceBtn');
+            if (rmBtn) {
+                if (globalCustomVoiceStr) rmBtn.style.display = 'inline-flex';
+                else rmBtn.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn("Could not load voice settings", e);
+        }
+    };
+
+    // THIẾT LẬP GIỌNG CHÀO MỪNG
+    window.greetUser = async function(force = false) {
+        await window.loadVoiceSettings();
+        
+        if (!force && sessionStorage.getItem('greeted') === 'true') return;
+        
+        const isEnabled = document.getElementById('voiceToggleCheckbox').checked;
+        if (!isEnabled && !force) {
+            sessionStorage.setItem('greeted', 'true');
+            return;
+        }
+
+        if (globalCustomVoiceStr) {
+            const audio = new Audio(globalCustomVoiceStr);
+            audio.onplay = () => { sessionStorage.setItem('greeted', 'true'); };
+            audio.onerror = (e) => { console.warn("Custom Audio Error", e); };
+            audio.play().catch(e => {
+                console.warn("Autoplay blocked for custom audio:", e);
+            });
+            return;
+        }
+
+        // Câu chào mặc định
+        window._currentUtterance = new SpeechSynthesisUtterance(`Chào mừng quản trị viên đã trở lại`);
+        window._currentUtterance.lang = 'vi-VN';
+        window._currentUtterance.rate = 1.0;
+        
+        window._currentUtterance.onstart = () => {
+            sessionStorage.setItem('greeted', 'true');
+        };
+        
+        window._currentUtterance.onerror = (e) => {
+            console.warn("Speech Synthesis Error:", e);
+        };
+
+        window.speechSynthesis.speak(window._currentUtterance);
+    }
+
+    window.toggleVoiceSetting = async function() {
+        const isChecked = document.getElementById('voiceToggleCheckbox').checked;
+        try {
+            await apiPost('/settings/voice', { enabled: isChecked });
+            showToast('✅ Đã cập nhật cài đặt đồng bộ giọng nói toàn hệ thống');
+        } catch (e) {
+            showToast('❌ Lỗi: ' + e.message);
+            document.getElementById('voiceToggleCheckbox').checked = !isChecked; // Restore
+        }
+    };
+
+    window.uploadCustomVoice = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+             showToast('❌ Lỗi: File quá lớn, vui lòng chọn file dưới 5MB');
+             return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function() {
+            showToast('⏳ Đang tải lên hệ thống...');
+            try {
+                await apiPost('/settings/voice/custom', { audioData: reader.result });
+                globalCustomVoiceStr = reader.result;
+                document.getElementById('removeVoiceBtn').style.display = 'inline-flex';
+                showToast('✅ Tải lên giọng nói thành công!');
+                document.getElementById('voiceUploadInput').value = '';
+                window.greetUser(true);
+            } catch (e) {
+                showToast('❌ Lỗi tải lên, payload quá lớn? ' + e.message);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.removeCustomVoice = async function() {
+        if (!await showConfirm("Xóa giọng nói riêng và quay về mặc định của AI?", "Xóa Giọng Nói Riêng", "🗑️", "Xóa Ngay")) return;
+        try {
+            await apiPost('/settings/voice/custom', { audioData: '' });
+            globalCustomVoiceStr = null;
+            document.getElementById('removeVoiceBtn').style.display = 'none';
+            showToast('✅ Đã xóa giọng nói riêng thành công');
+            window.greetUser(true); // Phát AI mặc định
+        } catch(e) {
+            showToast('❌ Lỗi: ' + e.message);
+        }
+    };
+
+    // Thử chào ngay khi load
+    setTimeout(() => greetUser(false), 800);
+
+    // Xử lý policy của Chrome: bắt buộc phải có thao tác click từ người dùng
+    document.addEventListener('click', () => {
+        if (sessionStorage.getItem('greeted') !== 'true') {
+            greetUser(false);
+        }
+    });
+}
+
+// ======================================
+// MOBILE NAVIGATION
+// ======================================
+window.toggleMobileMenu = function() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if(sidebar) sidebar.classList.toggle('active');
+    if(overlay) overlay.classList.toggle('active');
 }
 
 if (typeof emailjs !== 'undefined') emailjs.init(EMAILJS_PUBLIC_KEY);
@@ -199,6 +328,10 @@ async function fsUpdateNotification(id, data) {
     try { await apiPut(`/notifications/${id}`, data); }
     catch (e) { console.error(e); }
 }
+async function fsDeleteReadNotifications() {
+    try { await apiDelete('/notifications/read'); }
+    catch (e) { showToast('❌ Lỗi xoá thông báo: ' + e.message); console.error(e); }
+}
 async function fsAddService(data) {
     try { const r = await apiPost('/services', data); showToast('✅ Đã lưu Dịch Vụ!'); return r.id; }
     catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
@@ -243,6 +376,12 @@ function setupSSE() {
     sseInstance.onmessage = async (event) => {
         try {
             const msg = JSON.parse(event.data);
+            if (msg.type === 'voice_settings_changed') {
+                if (window.loadVoiceSettings) window.loadVoiceSettings();
+            }
+            if (msg.type === 'invite_code_changed') {
+                if (typeof fetchInviteCode === 'function') fetchInviteCode();
+            }
             if (msg.type === 'customers_changed') {
                 await reloadCustomers();
                 if (currentView !== 'admins' && currentView !== 'services') renderTable(searchInput.value);
@@ -359,7 +498,14 @@ function calculateDaysLeft(endDateStr) {
 function formatDate(s) {
     if (!s) return '';
     const p = s.split('-');
+    if (p.length < 3) return s;
     return `${p[2]}/${p[1]}/${p[0]}`;
+}
+
+function formatCurrency(v) {
+    if (!v) return '0';
+    let val = v.toString().replace(/\D/g, "");
+    return val.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 // ======================================
@@ -369,12 +515,30 @@ window.switchView = function (view, el) {
     document.querySelectorAll('.nav-links > li').forEach(li => li.classList.remove('active'));
     document.querySelectorAll('.submenu li').forEach(li => li.classList.remove('active'));
     if (el) el.classList.add('active');
+    
+    // Auto-close mobile menu
+    if (window.innerWidth <= 1024) {
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (sidebar.classList.contains('active')) {
+            sidebar.classList.remove('active');
+            overlay.classList.remove('active');
+        }
+    }
     document.getElementById('viewCustomers').classList.remove('active');
     document.getElementById('viewAdmins').classList.remove('active');
     document.getElementById('viewServices').classList.remove('active');
+    document.getElementById('viewRevenue').classList.remove('active');
+    
+    // Add viewSettings removal check safely
+    const viewSettingsNode = document.getElementById('viewSettings');
+    if (viewSettingsNode) viewSettingsNode.classList.remove('active');
+
     currentView = view;
     if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderPersonnel(); }
     else if (view === 'services') { document.getElementById('viewServices').classList.add('active'); renderServices(); }
+    else if (view === 'revenue') { document.getElementById('viewRevenue').classList.add('active'); renderRevenue(); }
+    else if (view === 'settings') { if (viewSettingsNode) viewSettingsNode.classList.add('active'); }
     else {
         document.getElementById('viewCustomers').classList.add('active');
         currentFilterService = '';
@@ -444,7 +608,8 @@ function renderTable(searchTerm = '') {
         tr.innerHTML = `
             <td title="${c.name} — ${c.service}"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;">${c.name}</div><div style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${svcIcon} ${c.service}</div></td>
             <td title="${c.phone}">${c.phone}</td>
-            <td title="${aName}"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;"><i class="ph ph-identification-card"></i>${aName}</div></td>
+            ${currentUser && currentUser.role === 'superadmin' ? `<td title="${aName}"><div style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;"><i class="ph ph-identification-card"></i>${aName}</div></td>` : ''}
+            <td style="font-weight: bold; color: var(--primary-lighter);">${formatCurrency(c.price)}</td>
             <td title="${c.email}" style="overflow:hidden;text-overflow:ellipsis;">${c.email}</td>
             <td><div style="display:flex;align-items:center;gap:6px;"><span style="font-size:0.85rem;">••••••</span><i class="ph ph-copy btn-icon" title="Sao chép" onclick="copyText('${c.password}')" style="font-size:1rem;"></i></div></td>
             <td>${formatDate(c.startDate)}</td>
@@ -588,6 +753,15 @@ window.toggleNotifDropdown = function () {
 }
 
 window.markNotifAsRead = async function (docId) { await fsUpdateNotification(docId, { isRead: true }); }
+window.clearReadNotifications = async function () {
+    const hasRead = cachedNotifications.some(n => n.isRead);
+    if (!hasRead) {
+        showToast('ℹ️ Không có thông báo nào đã đọc để xoá.');
+        return;
+    }
+    await fsDeleteReadNotifications();
+    showToast('🗑️ Đã xoá các thông báo đã đọc.');
+}
 
 document.addEventListener('click', e => {
     const w = document.querySelector('.notif-wrapper'), d = document.getElementById('notifDropdown');
@@ -696,7 +870,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
         return {
             "Tên Khách Hàng": c.name,
             "Số Điện Thoại": c.phone,
-            "Quản Lý Bằng": adminName,
+            "Quản Lý Bởi": adminName,
+            "Giá Tiền": formatCurrency(c.price || 0),
             "Dịch Vụ": c.service,
             "Tài Khoản (Email)": c.email,
             "Mật Khẩu": c.password,
@@ -757,6 +932,7 @@ document.getElementById('customerForm').addEventListener('submit', async (e) => 
         password: document.getElementById('custPwd').value,
         startDate: document.getElementById('custStart').value,
         endDate: document.getElementById('custEnd').value,
+        price: document.getElementById('custPrice').value.replace(/\D/g, ""),
         isEmailSent: false, isNotifGenerated: false
     };
     try {
@@ -782,6 +958,7 @@ window.editCustomer = function (docId) {
     document.getElementById('custPwd').value = c.password;
     document.getElementById('custStart').value = c.startDate;
     document.getElementById('custEnd').value = c.endDate;
+    document.getElementById('custPrice').value = formatCurrency(c.price || 0);
     document.getElementById('modalTitle').textContent = "Chỉnh Sửa Khách Hàng";
     customModal.classList.add('active');
 }
@@ -919,6 +1096,15 @@ window.deleteService = async function (docId) {
 
 searchInput.addEventListener('input', (e) => { if (currentView !== 'admins') renderTable(e.target.value); });
 
+// Format giá tiền khi nhập
+const priceInput = document.getElementById('custPrice');
+if (priceInput) {
+    priceInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, "");
+        e.target.value = formatCurrency(val);
+    });
+}
+
 // ======================================
 // PHÂN QUYỀN GIAO DIỆN LUN (UI TRIM)
 // ======================================
@@ -945,6 +1131,7 @@ function applyRolePermissions() {
                 }
                 localStorage.removeItem('aishop_token');
                 localStorage.removeItem('aishop_user');
+                sessionStorage.removeItem('greeted');
                 window.location.href = 'login.html';
             }
         };
@@ -959,15 +1146,23 @@ function applyRolePermissions() {
     }
 
     if (currentUser.role === 'superadmin') {
+        const navSettings = document.getElementById('navSettings');
+        if (navSettings) navSettings.style.display = 'block';
         const superadminSettings = document.getElementById('superadminSettings');
-        if (superadminSettings) superadminSettings.style.display = 'block';
+        if (superadminSettings) superadminSettings.style.display = 'flex';
         fetchInviteCode();
     } else {
         // Ẩn nút Thêm Nhân Sự đối với Quản trị viên thường
         const adminBtn = document.getElementById('addAdminBtn');
         if (adminBtn) adminBtn.style.display = 'none';
         
-        // Chắc chắn ẩn mục Settings (Đổi mã)
+        // Cập nhật giao diện ẩn Setting và Nhân Sự
+        const navSettings = document.getElementById('navSettings');
+        if (navSettings) navSettings.style.display = 'none';
+        const statAdmins = document.getElementById('statAdmins');
+        if (statAdmins) statAdmins.closest('.stat-card').style.display = 'none';
+        const thAdminColumn = document.getElementById('thAdminColumn');
+        if (thAdminColumn) thAdminColumn.style.display = 'none';
         const superadminSettings = document.getElementById('superadminSettings');
         if (superadminSettings) superadminSettings.style.display = 'none';
     }
@@ -1159,6 +1354,7 @@ async function init() {
         renderTable();
         updateAdminSelects();
         updateServiceSelects();
+        initRevenueFilters();
         updateExpiringBadge();
         renderNotifications();
         updateStatCards();
@@ -1205,6 +1401,109 @@ async function init() {
             showToast("❌ Không thể kết nối Server. Hãy tải lại trang.");
         }
     }
+}
+
+// ======================================
+// DOANH THU LOGIC
+// ======================================
+function initRevenueFilters() {
+    const yearSelect = document.getElementById('revenueYearFilter');
+    if (!yearSelect) return;
+    const currentYear = new Date().getFullYear();
+    let html = '';
+    for (let y = currentYear; y >= 2024; y--) {
+        html += `<option value="${y}">${y}</option>`;
+    }
+    yearSelect.innerHTML = html;
+}
+
+window.renderRevenue = function() {
+    const year = parseInt(document.getElementById('revenueYearFilter').value);
+    const grid = document.getElementById('revenueGrid');
+    if (!grid) return;
+    
+    // Khởi tạo 12 tháng
+    const months = Array.from({ length: 12 }, (_, i) => ({
+        month: i + 1,
+        total: 0,
+        count: 0
+    }));
+
+    // Tính toán từ cachedCustomers
+    cachedCustomers.forEach(c => {
+        if (!c.startDate || !c.price) return;
+        const d = new Date(c.startDate);
+        if (d.getFullYear() === year) {
+            const m = d.getMonth();
+            months[m].total += parseInt(c.price) || 0;
+            months[m].count += 1;
+        }
+    });
+
+    // Render cards
+    grid.innerHTML = months.reverse().map(m => `
+        <div class="month-revenue-card glass-panel">
+            <div class="month-label"> Th. ${m.month} / ${year} <i class="ph ph-trend-up" style="opacity:0.3"></i></div>
+            <div class="month-value">${formatCurrency(m.total)} <small style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">VNĐ</small></div>
+            <div class="customer-count"><i class="ph ph-users"></i> ${m.count} khách hàng mới</div>
+        </div>
+    `).join('');
+
+    // Update Stats
+    const yearlyTotal = months.reduce((acc, current) => acc + current.total, 0);
+    const monthsWithData = months.filter(m => m.total > 0).length || 1;
+    const avg = yearlyTotal / 12;
+    const max = Math.max(...months.map(m => m.total));
+
+    animateRevenueValue('revTotalYear', yearlyTotal);
+    animateRevenueValue('revAvgMonth', Math.round(avg));
+    animateRevenueValue('revMaxMonth', max);
+}
+
+function animateRevenueValue(id, end) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const current = parseInt(el.dataset.val) || 0;
+    el.dataset.val = end;
+    const duration = 500;
+    const startTime = performance.now();
+    function step(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const val = Math.round(current + (end - current) * progress);
+        el.textContent = formatCurrency(val);
+        if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+}
+
+window.exportRevenueExcel = function() {
+    const year = parseInt(document.getElementById('revenueYearFilter').value);
+    const monthData = [];
+    
+    // Lấy dữ liệu 12 tháng
+    for (let i = 0; i < 12; i++) {
+        let total = 0, count = 0;
+        cachedCustomers.forEach(c => {
+            if (!c.startDate || !c.price) return;
+            const d = new Date(c.startDate);
+            if (d.getFullYear() === year && d.getMonth() === i) {
+                total += parseInt(c.price) || 0;
+                count++;
+            }
+        });
+        monthData.push({
+            "Tháng": `Tháng ${i + 1}`,
+            "Năm": year,
+            "Doanh Thu (VNĐ)": total,
+            "Số Lượng Khách Hàng": count
+        });
+    }
+
+    const ws = XLSX.utils.json_to_sheet(monthData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DoanhThu");
+    XLSX.writeFile(wb, `Bao_Cao_Doanh_Thu_Nam_${year}.xlsx`);
+    showToast("✅ Đã xuất báo cáo doanh thu!");
 }
 
 init();

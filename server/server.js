@@ -14,7 +14,8 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static files (HTML, CSS, JS) từ thư mục gốc
 app.use(express.static(path.join(__dirname, '..')));
@@ -103,6 +104,11 @@ app.post('/api/auth/register', async (req, res) => {
 
         const result = await db.createUser({ fullName, email, password, role: 'admin' });
         if (result.error) return res.status(400).json({ error: result.error });
+
+        // Tự động vô hiệu hoá mã cũ và tạo mã mới ngay sau khi có người đăng ký thành công
+        await db.generateInviteCode();
+        broadcast('invite_code_changed');
+
         res.status(201).json({ success: true, message: 'Đăng ký Quản Trị Viên thành công!' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -282,6 +288,29 @@ app.post('/api/settings/invite-code', authMiddleware, requireRole('superadmin'),
     res.json({ code });
 });
 
+app.get('/api/settings/voice', authMiddleware, async (req, res) => {
+    let enabled = await db.getSetting('voice_enabled');
+    if (enabled === null) enabled = 'true';
+    res.json({ enabled: enabled === 'true' });
+});
+
+app.post('/api/settings/voice', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
+    await db.setSetting('voice_enabled', req.body.enabled ? 'true' : 'false');
+    broadcast('voice_settings_changed');
+    res.json({ success: true });
+});
+
+app.get('/api/settings/voice/custom', authMiddleware, async (req, res) => {
+    let audioData = await db.getSetting('voice_custom_audio');
+    res.json({ audioData: audioData || null });
+});
+
+app.post('/api/settings/voice/custom', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
+    await db.setSetting('voice_custom_audio', req.body.audioData || ''); // empty string effectively removes it
+    broadcast('voice_settings_changed');
+    res.json({ success: true });
+});
+
 // API: Database Info (chỉ superadmin)
 app.get('/api/db-info', authMiddleware, requireRole('superadmin'), async (req, res) => {
     try {
@@ -354,19 +383,32 @@ app.delete('/api/services/:id', authMiddleware, async (req, res) => {
 // ======================================
 // API: NOTIFICATIONS
 // ======================================
-app.get('/api/notifications', async (req, res) => {
+app.get('/api/notifications', authMiddleware, async (req, res) => {
     try {
-        res.json(await db.getAllNotifications());
+        const queryOwner = req.user.id;
+        res.json(await db.getAllNotifications(queryOwner));
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.post('/api/notifications', async (req, res) => {
+app.post('/api/notifications', authMiddleware, async (req, res) => {
     try {
-        const id = await db.addNotification(req.body);
+        const payload = { ...req.body, ownerId: req.user.id };
+        const id = await db.addNotification(payload);
         broadcast('notifications_changed');
         res.status(201).json({ id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/notifications/read', authMiddleware, async (req, res) => {
+    try {
+        const queryOwner = req.user.id;
+        await db.deleteReadNotifications(queryOwner);
+        broadcast('notifications_changed');
+        res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

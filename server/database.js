@@ -111,7 +111,8 @@ async function createTables() {
             endDate TEXT DEFAULT '',
             isEmailSent INTEGER DEFAULT 0,
             isNotifGenerated INTEGER DEFAULT 0,
-            ownerId TEXT DEFAULT ''
+            ownerId TEXT DEFAULT '',
+            price TEXT DEFAULT '0'
         )`,
         `CREATE TABLE IF NOT EXISTS admins (
             id TEXT PRIMARY KEY,
@@ -131,7 +132,8 @@ async function createTables() {
             title TEXT DEFAULT '',
             body TEXT DEFAULT '',
             time TEXT DEFAULT '',
-            isRead INTEGER DEFAULT 0
+            isRead INTEGER DEFAULT 0,
+            ownerId TEXT DEFAULT ''
         )`,
         `CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -171,7 +173,9 @@ async function migrateDatabase() {
     const migrations = [
         "ALTER TABLE customers ADD COLUMN ownerId TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN createdBy TEXT DEFAULT ''",
-        "ALTER TABLE services ADD COLUMN ownerId TEXT DEFAULT ''"
+        "ALTER TABLE services ADD COLUMN ownerId TEXT DEFAULT ''",
+        "ALTER TABLE notifications ADD COLUMN ownerId TEXT DEFAULT ''",
+        "ALTER TABLE customers ADD COLUMN price TEXT DEFAULT '0'"
     ];
     for (const sql of migrations) {
         try { await execute(sql); console.log('✅ Migration:', sql); }
@@ -305,11 +309,11 @@ async function getCustomer(id) {
 async function addCustomer(data) {
     const id = uuidv4();
     await execute(
-        `INSERT INTO customers (id, name, phone, service, adminId, email, password, startDate, endDate, isEmailSent, isNotifGenerated, ownerId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO customers (id, name, phone, service, adminId, email, password, startDate, endDate, isEmailSent, isNotifGenerated, ownerId, price)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, data.name || '', data.phone || '', data.service || '', data.adminId || '',
          data.email || '', data.password || '', data.startDate || '', data.endDate || '',
-         data.isEmailSent ? 1 : 0, data.isNotifGenerated ? 1 : 0, data.ownerId || '']
+         data.isEmailSent ? 1 : 0, data.isNotifGenerated ? 1 : 0, data.ownerId || '', data.price || '0']
     );
     return id;
 }
@@ -320,7 +324,7 @@ async function updateCustomer(id, data) {
 
     const fields = [];
     const values = [];
-    for (const key of ['name', 'phone', 'service', 'adminId', 'email', 'password', 'startDate', 'endDate']) {
+    for (const key of ['name', 'phone', 'service', 'adminId', 'email', 'password', 'startDate', 'endDate', 'price']) {
         if (data[key] !== undefined) {
             fields.push(`${key} = ?`);
             values.push(data[key]);
@@ -438,7 +442,11 @@ async function deleteService(id) {
 // ======================================
 // NOTIFICATIONS
 // ======================================
-async function getAllNotifications() {
+async function getAllNotifications(ownerId = null) {
+    if (ownerId && ownerId !== '') {
+        return (await queryAll('SELECT * FROM notifications WHERE ownerId = ? ORDER BY time DESC', [ownerId]))
+            .map(n => ({ ...n, isRead: !!n.isRead }));
+    }
     return (await queryAll('SELECT * FROM notifications ORDER BY time DESC'))
         .map(n => ({ ...n, isRead: !!n.isRead }));
 }
@@ -446,11 +454,20 @@ async function getAllNotifications() {
 async function addNotification(data) {
     const id = uuidv4();
     await execute(
-        'INSERT INTO notifications (id, custId, title, body, time, isRead) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO notifications (id, custId, title, body, time, isRead, ownerId) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [id, data.custId || '', data.title || '', data.body || '',
-         data.time || new Date().toISOString(), data.isRead ? 1 : 0]
+         data.time || new Date().toISOString(), data.isRead ? 1 : 0, data.ownerId || '']
     );
     return id;
+}
+
+async function deleteReadNotifications(ownerId = null) {
+    if (ownerId && ownerId !== '') {
+        await execute('DELETE FROM notifications WHERE isRead = 1 AND ownerId = ?', [ownerId]);
+    } else {
+        await execute('DELETE FROM notifications WHERE isRead = 1');
+    }
+    return true;
 }
 
 async function updateNotification(id, data) {

@@ -53,16 +53,26 @@
 
                 <li onclick="switchView('admins', this)"><i class="ph ph-users-three"></i> Quản Lý Nhân Sự</li>
                 <li onclick="switchView('services', this)"><i class="ph ph-squares-four"></i> Quản Lý Dịch Vụ</li>
+                <li onclick="switchView('revenue', this)"><i class="ph ph-trend-up"></i> Báo Cáo Doanh Thu</li>
+                <li id="navSettings" onclick="switchView('settings', this)" style="display:none;"><i class="ph ph-gear"></i> Cài Đặt Hệ Thống</li>
             </ul>
         </aside>
+        
+        <!-- Mobile Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileMenu()"></div>
 
         <!-- Main Content -->
         <main class="main-content">
             <!-- Header -->
             <header class="top-header glass-panel">
-                <div class="search-bar">
-                    <i class="ph ph-magnifying-glass"></i>
-                    <input type="text" id="searchInput" placeholder="Tìm kiếm...">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                        <i class="ph ph-list"></i>
+                    </button>
+                    <div class="search-bar">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="searchInput" placeholder="Tìm kiếm...">
+                    </div>
                 </div>
                 <div class="user-profile" style="display:flex; align-items:center; gap:24px;">
                     <!-- Notification Center -->
@@ -73,6 +83,9 @@
                         <div id="notifDropdown" class="notif-dropdown glass-panel-modal">
                             <div class="notif-header">
                                 <h3>Thông báo</h3>
+                                <button class="btn-clear-notif" onclick="clearReadNotifications()" title="Xoá thông báo đã đọc">
+                                    <i class="ph ph-trash"></i> Xoá đã đọc
+                                </button>
                             </div>
                             <div class="notif-list" id="notifList">
                                 <!-- list data -->
@@ -81,7 +94,7 @@
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="openProfileModal()" title="Chỉnh sửa hồ sơ">
+                        <div style="display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="openProfileModal(); window.greetUser(true);" title="Chỉnh sửa hồ sơ và Test Giọng nói">
                             <div class="avatar"><i class="ph ph-user"></i></div>
                             <span id="userNameHeader">Hệ Thống</span>
                             <i class="ph ph-pencil-simple" style="font-size: 0.8rem; color: var(--text-muted);"></i>
@@ -98,35 +111,35 @@
                 <!-- Stats Cards -->
                 <div class="stats-grid" id="statsGrid">
                     <div class="stat-card glass-panel">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #6366f1, #818cf8);"><i class="ph ph-users"></i></div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--primary-light), var(--primary));"><i class="ph ph-users"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statTotal">0</span>
                             <span class="stat-label">Tổng Khách Hàng</span>
                         </div>
                     </div>
                     <div class="stat-card glass-panel">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #f87171);"><i class="ph ph-warning"></i></div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--danger), #f87171);"><i class="ph ph-warning"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statExpiring">0</span>
                             <span class="stat-label">Sắp Hết Hạn</span>
                         </div>
                     </div>
                     <div class="stat-card glass-panel">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #34d399);"><i class="ph ph-check-circle"></i></div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--success), #34d399);"><i class="ph ph-check-circle"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statActive">0</span>
                             <span class="stat-label">Đang Hoạt Động</span>
                         </div>
                     </div>
                     <div class="stat-card glass-panel">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);"><i class="ph ph-chalkboard-teacher"></i></div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--warning), #fbbf24);"><i class="ph ph-chalkboard-teacher"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statAdmins">0</span>
                             <span class="stat-label">Tổng Nhân Sự</span>
                         </div>
                     </div>
                     <div class="stat-card glass-panel">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);"><i class="ph ph-squares-four"></i></div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--primary), var(--primary-dark, #334663));"><i class="ph ph-squares-four"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statServices">0</span>
                             <span class="stat-label">Dịch Vụ</span>
@@ -137,8 +150,8 @@
                 <div class="actions-bar">
                     <h1 class="page-title" id="mainTitle">Danh Sách Khách Hàng</h1>
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                        <button class="btn-secondary" id="downloadTemplateBtn" style="border-color: #8b5cf6; color: #8b5cf6; padding: 8px 12px;" title="Tải mẫu nhập"><i class="ph ph-download-simple"></i> Tải Mẫu</button>
-                        <button class="btn-secondary" id="importExcelBtn" style="border-color: #f59e0b; color: #f59e0b;"><i class="ph ph-upload-simple"></i> Nhập Excel</button>
+                        <button class="btn-secondary" id="downloadTemplateBtn" style="border-color: var(--primary-light); color: var(--primary-light); padding: 8px 12px;" title="Tải mẫu nhập"><i class="ph ph-download-simple"></i> Tải Mẫu</button>
+                        <button class="btn-secondary" id="importExcelBtn" style="border-color: var(--warning); color: var(--warning);"><i class="ph ph-upload-simple"></i> Nhập Excel</button>
                         <input type="file" id="importExcelInput" accept=".xlsx, .xls" style="display: none;">
                         <button class="btn-secondary" id="exportExcelBtn" style="border-color: #10b981; color: #10b981;"><i class="ph ph-file-xls"></i> Xuất Excel</button>
                         <button class="btn-primary" id="addBtn"><i class="ph ph-plus"></i> Thêm Khách Hàng</button>
@@ -150,7 +163,8 @@
                             <tr>
                                 <th>Khách Hàng</th>
                                 <th>Số Điện Thoại</th>
-                                <th>Quản Lý Bằng</th> <!-- Replaced Dịch vụ -> Quản lý (Admin) -->
+                                <th id="thAdminColumn">Quản Lý Bởi</th>
+                                <th>Giá Tiền</th>
                                 <th>Tài Khoản (Email)</th>
                                 <th>Mật Khẩu</th>
                                 <th>Bắt Đầu</th>
@@ -172,20 +186,6 @@
 
             <!-- VIEW: PERSONNEL -->
             <div id="viewAdmins" class="view-section">
-                <!-- Vùng dành cho SuperAdmin hiển thị mã mời -->
-                <div id="superadminSettings" style="display: none; padding: 16px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; margin-bottom: 24px; border: 1px solid rgba(99, 102, 241, 0.2);">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <h3 style="margin: 0; color: #818cf8; font-size: 1.1rem;"><i class="ph ph-shield-check"></i> Cài đặt Hệ thống (Chỉ dành cho Admin)</h3>
-                            <p style="margin: 4px 0 0 0; font-size: 0.9rem; color: var(--text-muted);">Mã bảo mật để đăng ký tài khoản Quản Trị Viên bên ngoài:</p>
-                        </div>
-                        <div style="display:flex; align-items:center; gap: 12px;">
-                            <span id="inviteCodeDisplay" style="font-size: 1.5rem; font-weight: bold; letter-spacing: 4px; color: var(--text-main);">------</span>
-                            <button class="btn-primary" onclick="regenerateInviteCode()" style="padding: 8px 16px; font-size: 0.9rem;"><i class="ph ph-arrows-clockwise"></i> Đổi Mã</button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="actions-bar">
                     <h1 class="page-title">Quản Lý Nhân Sự (NV & QTV)</h1>
                     <button class="btn-primary" id="addAdminBtn"><i class="ph ph-user-plus"></i> Thêm Nhân Sự</button>
@@ -238,6 +238,95 @@
                     </div>
                 </div>
             </div>
+
+            <!-- VIEW: SETTINGS (CÀI ĐẶT HỆ THỐNG) -->
+            <div id="viewSettings" class="view-section">
+                <div class="actions-bar">
+                    <h1 class="page-title">Cài Đặt Hệ Thống</h1>
+                </div>
+                
+                <div class="glass-panel" style="padding: 24px; display: flex; flex-direction: column; gap: 24px;">
+                    <!-- Setup Giọng Nói Mặc định -->
+                    <div class="settings-row">
+                        <div class="settings-info">
+                            <h3 class="settings-title default-voice"><i class="ph ph-speaker-high"></i> Bật/Tắt Giọng Nói Chào Mừng</h3>
+                            <p class="settings-desc">Đồng bộ việc phát âm thanh chào mừng khi bất kì quản trị viên hay nhân viên nào đăng nhập thành công vào hệ thống.</p>
+                        </div>
+                        <div class="settings-action">
+                            <label class="settings-toggle" title="Bật/Tắt đồng bộ">
+                                <input type="checkbox" id="voiceToggleCheckbox" onchange="toggleVoiceSetting()">
+                                <span>Kích Hoạt Giọng Nói</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Setup Giọng Nói Riêng -->
+                    <div class="settings-row">
+                        <div class="settings-info">
+                            <h3 class="settings-title custom-voice"><i class="ph ph-waveform"></i> Tải Lên Giọng Nói Riêng (MP3/WAV)</h3>
+                            <p class="settings-desc">Thay thế máy đọc tự động (AI) bằng file thu âm thực tế của bạn. Tính năng áp dụng đồng bộ cho tất cả tài khoản. (Tối đa 5MB)</p>
+                        </div>
+                        <div class="settings-action-group">
+                            <button class="btn-secondary" id="removeVoiceBtn" onclick="removeCustomVoice()" title="Khôi phục lại AI mặc định"><i class="ph ph-trash"></i> Phục Hồi AI Mặc Định</button>
+                            <button class="btn-primary" onclick="document.getElementById('voiceUploadInput').click()"><i class="ph ph-upload-simple"></i> Tải Tệp Lên</button>
+                            <input type="file" id="voiceUploadInput" accept="audio/mpeg, audio/wav, audio/x-m4a, audio/ogg" style="display: none;" onchange="uploadCustomVoice(event)">
+                        </div>
+                    </div>
+
+                    <!-- Chỉ dành cho SuperAdmin -->
+                    <div id="superadminSettings" class="settings-row no-border">
+                        <div class="settings-info">
+                            <h3 class="settings-title superadmin-only"><i class="ph ph-shield-check"></i> Cấu Hình Mã Mời (Chỉ SuperAdmin)</h3>
+                            <p class="settings-desc">Mã bảo mật cho phép thành viên tự đăng ký làm quản trị viên. Hãy gửi mã này cho những người bạn muốn thêm vào hệ thống quản lý.</p>
+                        </div>
+                        <div class="invite-code-container">
+                            <span id="inviteCodeDisplay">------</span>
+                            <button class="btn-primary" onclick="regenerateInviteCode()"><i class="ph ph-arrows-clockwise"></i> Tạo Mã Mới</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: REVENUE (DOANH THU) -->
+            <div id="viewRevenue" class="view-section">
+                <div class="actions-bar">
+                    <h1 class="page-title">Báo Cáo Doanh Thu</h1>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <select id="revenueYearFilter" onchange="renderRevenue()" style="width: 120px; padding: 8px 12px; font-size: 0.95rem;">
+                            <!-- populated by JS -->
+                        </select>
+                        <button class="btn-secondary" onclick="exportRevenueExcel()" title="Xuất báo cáo doanh thu"><i class="ph ph-file-xls"></i> Xuất Excel</button>
+                    </div>
+                </div>
+
+                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 8px;">
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="ph ph-money"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="revTotalYear">0</span>
+                            <span class="stat-label">Tổng Doanh Thu Năm</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--primary), var(--primary-dark));"><i class="ph ph-calendar"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="revAvgMonth">0</span>
+                            <span class="stat-label">Doanh Thu TB Tháng</span>
+                        </div>
+                    </div>
+                    <div class="stat-card glass-panel">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, var(--warning), #d97706);"><i class="ph ph-chart-line-up"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="revMaxMonth">0</span>
+                            <span class="stat-label">Tháng Cao Nhất</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="revenue-grid" id="revenueGrid">
+                    <!-- populated by JS -->
+                </div>
+            </div>
         </main>
     </div>
 
@@ -264,13 +353,12 @@
                     <div class="col">
                         <label>Loại Dịch Vụ</label>
                         <select id="custService" required>
-                            <option value="ChatGPT Plus">ChatGPT Plus</option>
-                            <option value="Adobe Creative Cloud">Adobe Creative Cloud</option>
-                            <option value="Canva Pro">Canva Pro</option>
-                            <option value="Netflix Premium">Netflix Premium</option>
-                            <option value="Midjourney">Midjourney</option>
-                            <option value="Khác">Khác</option>
+                            <!-- options populated by JS -->
                         </select>
+                    </div>
+                    <div class="col">
+                        <label>Giá Tiền (VNĐ)</label>
+                        <input type="text" id="custPrice" required placeholder="Ví dụ: 200,000">
                     </div>
                     <div class="col" style="display: none;">
                         <label>Người Quản Lý</label>
@@ -382,8 +470,8 @@
                 <div class="form-group">
                     <label>Màu Sắc</label>
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <input type="color" id="serviceColor" value="#6366f1" style="width: 50px; height: 40px; padding: 2px; cursor: pointer; border-radius: 8px;">
-                        <span id="serviceColorLabel" style="color: var(--text-muted); font-size: 0.9rem;">#6366f1</span>
+                        <input type="color" id="serviceColor" value="#6582AA" style="width: 50px; height: 40px; padding: 2px; cursor: pointer; border-radius: 8px;">
+                        <span id="serviceColorLabel" style="color: var(--text-muted); font-size: 0.9rem;">#6582AA</span>
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -437,7 +525,7 @@
             </form>
         </div>
     </div>
-    <script src="script.js?v=3"></script>
+    <script src="script.js?v=8"></script>
 </body>
 
 </html>
