@@ -31,13 +31,23 @@ let currentLoginAs = 'admin'; // 'admin' hoặc 'user'
 window.showRegister = function () {
     document.getElementById('loginCard').style.display = 'none';
     document.getElementById('registerCard').style.display = 'block';
-    document.getElementById('registerCard').style.animation = 'fadeInUp 0.4s ease';
+    document.getElementById('registerCard').style.animation = 'cardFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+    // Sync panel tabs if they exist
+    const tabLogin = document.getElementById('tabLogin');
+    const tabRegister = document.getElementById('tabRegister');
+    if (tabLogin) tabLogin.classList.remove('active');
+    if (tabRegister) tabRegister.classList.add('active');
 }
 
 window.showLogin = function () {
     document.getElementById('registerCard').style.display = 'none';
     document.getElementById('loginCard').style.display = 'block';
-    document.getElementById('loginCard').style.animation = 'fadeInUp 0.4s ease';
+    document.getElementById('loginCard').style.animation = 'cardFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+    // Sync panel tabs if they exist
+    const tabLogin = document.getElementById('tabLogin');
+    const tabRegister = document.getElementById('tabRegister');
+    if (tabLogin) tabLogin.classList.add('active');
+    if (tabRegister) tabRegister.classList.remove('active');
 }
 
 // ======================================

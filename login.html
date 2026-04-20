@@ -4,101 +4,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AISHOP - Đăng Nhập</title>
-    <link rel="stylesheet" href="login.css?v=3">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>AISHOP - Đăng Nhập Hệ Thống</title>
+    <meta name="description" content="Hệ thống Quản lý Khách hàng AI - Đăng nhập để truy cập bảng điều khiển">
+    <link rel="stylesheet" href="login.css?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 
 <body>
-    <!-- Background particles -->
-    <div class="bg-particles">
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-        <div class="particle"></div>
-    </div>
+    <div class="auth-wrapper">
+        <!-- LEFT PANEL — Decorative -->
+        <div class="auth-panel-left">
+            <!-- Geometric Material Layers -->
+            <div class="geo-layer geo-1"></div>
+            <div class="geo-layer geo-2"></div>
+            <div class="geo-layer geo-3"></div>
+            
+            <!-- Floating orbs -->
+            <div class="orb orb-1"></div>
+            <div class="orb orb-2"></div>
+            <div class="orb orb-3"></div>
 
-    <div class="auth-container">
-        <!-- Logo -->
-        <div class="auth-logo">
-            <i class="ph ph-cube-transparent"></i>
-            <h1>AISHOP</h1>
-            <p>Hệ thống Quản lý Khách hàng AI</p>
-        </div>
-
-        <!-- LOGIN FORM -->
-        <div class="auth-card glass-card" id="loginCard">
-            <h2>Đăng Nhập</h2>
-
-            <!-- Login Type Tabs (Removed since role is auto-detected) -->
-            <p class="login-hint" id="loginHint">Đăng nhập vào bảng điều khiển (Admin / Quản Trị Viên / Nhân Viên)</p>
-
-            <form id="loginForm">
-                <div class="form-field">
-                    <i class="ph ph-envelope-simple"></i>
-                    <input type="email" id="loginEmail" placeholder="Email" required autocomplete="email">
+            <!-- Panel Content -->
+            <div class="panel-content">
+                <div class="panel-icon">
+                    <i class="ph ph-cube-transparent"></i>
                 </div>
-                <div class="form-field">
-                    <i class="ph ph-lock-key"></i>
-                    <input type="password" id="loginPwd" placeholder="Mật khẩu" required autocomplete="current-password">
-                    <i class="ph ph-eye toggle-pwd" onclick="togglePwd('loginPwd', this)"></i>
+                <h1>AISHOP</h1>
+                <p class="panel-tagline">Hệ thống Quản lý<br>Khách hàng AI</p>
+                
+                <!-- Navigation Tabs -->
+                <div class="panel-tabs">
+                    <button class="panel-tab active" id="tabLogin" onclick="switchToLogin()">
+                        <i class="ph ph-sign-in"></i> Đăng Nhập
+                    </button>
+                    <button class="panel-tab" id="tabRegister" onclick="switchToRegister()">
+                        <i class="ph ph-user-plus"></i> Đăng Ký
+                    </button>
                 </div>
-                <div id="loginError" class="error-msg"></div>
-                <button type="submit" class="auth-btn" id="loginBtn">
-                    <span>Đăng Nhập</span>
-                    <i class="ph ph-sign-in"></i>
-                </button>
-            </form>
+            </div>
 
-            <div class="auth-footer">
-                Chưa có tài khoản? <a href="#" onclick="showRegister()">Đăng ký ngay</a>
+            <!-- Bottom decoration -->
+            <div class="panel-footer">
+                <i class="ph ph-shield-check"></i>
+                <span>Bảo mật SSL 256-bit</span>
             </div>
         </div>
 
-        <!-- REGISTER FORM -->
-        <div class="auth-card glass-card" id="registerCard" style="display: none;">
-            <h2>Đăng Ký Quản Trị Viên</h2>
-            <p class="login-hint">Yêu cầu mã số bảo mật từ Admin</p>
+        <!-- RIGHT PANEL — Forms -->
+        <div class="auth-panel-right">
+            <!-- Mobile Logo (shown on small screens) -->
+            <div class="mobile-logo">
+                <i class="ph ph-cube-transparent"></i>
+                <h1>AISHOP</h1>
+            </div>
 
-            <form id="registerForm">
-                <div class="form-field">
-                    <i class="ph ph-user-circle"></i>
-                    <input type="text" id="regName" placeholder="Họ và tên" required>
+            <!-- LOGIN FORM -->
+            <div class="auth-card" id="loginCard">
+                <div class="card-avatar">
+                    <div class="avatar-circle">
+                        <i class="ph ph-user"></i>
+                    </div>
                 </div>
-                <div class="form-field">
-                    <i class="ph ph-envelope-simple"></i>
-                    <input type="email" id="regEmail" placeholder="Email" required autocomplete="email">
-                </div>
-                <div class="form-field">
-                    <i class="ph ph-lock-key"></i>
-                    <input type="password" id="regPwd" placeholder="Mật khẩu (ít nhất 6 ký tự)" required minlength="6" autocomplete="new-password">
-                    <i class="ph ph-eye toggle-pwd" onclick="togglePwd('regPwd', this)"></i>
-                </div>
-                <div class="form-field">
-                    <i class="ph ph-lock-key"></i>
-                    <input type="password" id="regPwdConfirm" placeholder="Xác nhận mật khẩu" required minlength="6" autocomplete="new-password">
-                </div>
-                <div class="form-field">
-                    <i class="ph ph-shield-check"></i>
-                    <input type="text" id="regInviteCode" placeholder="Mã 6 chữ số (từ Admin)" required minlength="6" maxlength="6">
-                </div>
-                <div id="registerError" class="error-msg"></div>
-                <div id="registerSuccess" class="success-msg"></div>
-                <button type="submit" class="auth-btn" id="registerBtn">
-                    <span>Đăng Ký Quản Trị Viên</span>
-                    <i class="ph ph-shield-plus"></i>
-                </button>
-            </form>
+                <h2>Đăng Nhập</h2>
+                <p class="card-subtitle">Chào mừng bạn quay lại hệ thống</p>
 
-            <div class="auth-footer">
-                Đã có tài khoản? <a href="#" onclick="showLogin()">Đăng nhập</a>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <div class="form-field">
+                            <i class="ph ph-user field-icon"></i>
+                            <input type="email" id="loginEmail" placeholder="Email" required autocomplete="email">
+                            <div class="field-line"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="form-field">
+                            <i class="ph ph-lock-key field-icon"></i>
+                            <input type="password" id="loginPwd" placeholder="Mật khẩu" required autocomplete="current-password">
+                            <i class="ph ph-eye toggle-pwd" onclick="togglePwd('loginPwd', this)"></i>
+                            <div class="field-line"></div>
+                        </div>
+                    </div>
+
+                    <div id="loginError" class="error-msg"></div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="auth-btn" id="loginBtn">
+                            <span>ĐĂNG NHẬP</span>
+                            <i class="ph ph-arrow-right"></i>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="auth-footer">
+                    <span>Chưa có tài khoản?</span>
+                    <a href="#" onclick="switchToRegister()">Đăng ký ngay</a>
+                </div>
+            </div>
+
+            <!-- REGISTER FORM -->
+            <div class="auth-card" id="registerCard" style="display: none;">
+                <div class="card-avatar">
+                    <div class="avatar-circle register-avatar">
+                        <i class="ph ph-shield-plus"></i>
+                    </div>
+                </div>
+                <h2>Đăng Ký Quản Trị Viên</h2>
+                <p class="card-subtitle">Yêu cầu mã bảo mật từ Admin</p>
+
+                <form id="registerForm">
+                    <div class="form-group">
+                        <div class="form-field">
+                            <i class="ph ph-user-circle field-icon"></i>
+                            <input type="text" id="regName" placeholder="Họ và tên" required>
+                            <div class="field-line"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="form-field">
+                            <i class="ph ph-envelope-simple field-icon"></i>
+                            <input type="email" id="regEmail" placeholder="Email" required autocomplete="email">
+                            <div class="field-line"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="form-field">
+                                <i class="ph ph-lock-key field-icon"></i>
+                                <input type="password" id="regPwd" placeholder="Mật khẩu (≥6 ký tự)" required minlength="6" autocomplete="new-password">
+                                <i class="ph ph-eye toggle-pwd" onclick="togglePwd('regPwd', this)"></i>
+                                <div class="field-line"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="form-field">
+                                <i class="ph ph-lock-key field-icon"></i>
+                                <input type="password" id="regPwdConfirm" placeholder="Xác nhận mật khẩu" required minlength="6" autocomplete="new-password">
+                                <div class="field-line"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="form-field">
+                            <i class="ph ph-shield-check field-icon"></i>
+                            <input type="text" id="regInviteCode" placeholder="Mã 6 chữ số (từ Admin)" required minlength="6" maxlength="6">
+                            <div class="field-line"></div>
+                        </div>
+                    </div>
+
+                    <div id="registerError" class="error-msg"></div>
+                    <div id="registerSuccess" class="success-msg"></div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="auth-btn register-btn" id="registerBtn">
+                            <span>ĐĂNG KÝ</span>
+                            <i class="ph ph-shield-plus"></i>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="auth-footer">
+                    <span>Đã có tài khoản?</span>
+                    <a href="#" onclick="switchToLogin()">Đăng nhập</a>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="auth.js?v=3"></script>
+    <script>
+        // Panel tab switching (visual only, auth.js handles form logic)
+        function switchToLogin() {
+            document.getElementById('tabLogin').classList.add('active');
+            document.getElementById('tabRegister').classList.remove('active');
+            showLogin();
+        }
+        function switchToRegister() {
+            document.getElementById('tabRegister').classList.add('active');
+            document.getElementById('tabLogin').classList.remove('active');
+            showRegister();
+        }
+    </script>
+    <script src="auth.js?v=5"></script>
 </body>
 
 </html>
