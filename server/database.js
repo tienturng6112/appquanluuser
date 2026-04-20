@@ -400,6 +400,11 @@ async function getAllServices(ownerId = null) {
     return await queryAll('SELECT * FROM services');
 }
 
+async function getService(id) {
+    const row = await queryOne('SELECT * FROM services WHERE id = ?', [id]);
+    return row ? row : null;
+}
+
 async function addService(data) {
     const id = uuidv4();
     await execute('INSERT INTO services (id, name, icon, color, ownerId) VALUES (?, ?, ?, ?, ?)',
@@ -632,7 +637,7 @@ module.exports = {
     initDatabase, execute,
     getAllCustomers, getCustomer, addCustomer, updateCustomer, deleteCustomer,
     getAllAdmins, addAdmin, updateAdmin, deleteAdmin,
-    getAllServices, addService, updateService, deleteService,
+    getAllServices, getService, addService, updateService, deleteService,
     getAllNotifications, addNotification, updateNotification,
     getSetting, setSetting, generateInviteCode,
     getDatabaseInfo,

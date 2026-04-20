@@ -167,9 +167,9 @@ async function apiDelete(path) {
 // ======================================
 // CRUD WRAPPERS (giữ nguyên tên hàm cũ)
 // ======================================
-async function fsAddCustomer(data) {
-    try { const r = await apiPost('/customers', data); showToast('✅ Đã lưu khách hàng!'); return r.id; }
-    catch (e) { showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
+async function fsAddCustomer(data, isSilent = false) {
+    try { const r = await apiPost('/customers', data); if(!isSilent) showToast('✅ Đã lưu khách hàng!'); return r.id; }
+    catch (e) { if(!isSilent) showToast('❌ Lỗi: ' + e.message); console.error(e); throw e; }
 }
 async function fsUpdateCustomer(id, data) {
     try { await apiPut(`/customers/${id}`, data); }
@@ -734,6 +734,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
 
 document.getElementById('addBtn').addEventListener('click', () => {
     updateAdminSelects();
+    if (currentUser) document.getElementById('custAdmin').value = viewingOwnerId || currentUser.id;
     document.getElementById('modalTitle').textContent = "Thêm Khách Hàng";
     document.getElementById('custStart').value = new Date().toISOString().split('T')[0];
     const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
@@ -1036,6 +1037,90 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
         showToast("❌ Lỗi: " + err.message);
     }
 });
+
+// ======================================
+// EXCEL IMPORT & EXPORT
+// ======================================
+const templateHeaders = ['Tên khách hàng', 'Số điện thoại', 'Loại Dịch Vụ', 'Email tài khoản', 'Mật khẩu', 'Ngày bắt đầu (YYYY-MM-DD)', 'Ngày hết hạn (YYYY-MM-DD)'];
+
+if (document.getElementById('downloadTemplateBtn')) {
+    document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+        const wb = XLSX.utils.book_new();
+        const wsData = [
+            templateHeaders,
+            ['Nguyễn Văn A', '0901234567', 'ChatGPT Plus', 'nguyenvana@gmail.com', '123456', '2026-01-01', '2026-02-01']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        // Tự động set chiều rộng cột cho đẹp
+        ws['!cols'] = [{wch: 20}, {wch: 15}, {wch: 20}, {wch: 25}, {wch: 15}, {wch: 25}, {wch: 25}];
+        XLSX.utils.book_append_sheet(wb, ws, "Mau_Nhap");
+        XLSX.writeFile(wb, "Mau_Nhap_Khach_Hang.xlsx");
+    });
+}
+
+if (document.getElementById('importExcelBtn')) {
+    document.getElementById('importExcelBtn').addEventListener('click', () => {
+        document.getElementById('importExcelInput').click();
+    });
+}
+
+if (document.getElementById('importExcelInput')) {
+    document.getElementById('importExcelInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const firstSheet = workbook.SheetNames[0];
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1 });
+                
+                if (rows.length < 2) {
+                    showToast("❌ File Excel trống hoặc thiếu dữ liệu");
+                    return;
+                }
+
+                showToast(`⏳ Đang xử lý nhập ${rows.length - 1} khách hàng...`);
+                let successCount = 0;
+                
+                for (let i = 1; i < rows.length; i++) {
+                    const r = rows[i];
+                    if (!r || r.length === 0 || !r[0]) continue; // skip dòng trống
+                    
+                    const newCustomer = {
+                        name: r[0] ? String(r[0]).trim() : '',
+                        phone: r[1] ? String(r[1]).trim() : '',
+                        service: r[2] ? String(r[2]).trim() : 'Khác',
+                        email: r[3] ? String(r[3]).trim() : '',
+                        password: r[4] ? String(r[4]).trim() : '',
+                        startDate: r[5] ? String(r[5]).trim() : new Date().toISOString().split('T')[0],
+                        endDate: r[6] ? String(r[6]).trim() : new Date().toISOString().split('T')[0],
+                        adminId: viewingOwnerId || currentUser.id
+                    };
+                    
+                    try {
+                        await fsAddCustomer(newCustomer, true); // true: silent/no toast
+                        successCount++;
+                    } catch (err) {
+                        console.error('Lỗi dòng', i, err);
+                    }
+                }
+                
+                document.getElementById('importExcelInput').value = '';
+                showToast(`✅ Đã nhập thành công ${successCount} khách hàng!`);
+                
+            } catch (err) {
+                console.error(err);
+                showToast("❌ Lỗi khi đọc file Excel");
+            }
+        };
+        reader.readAsBinaryString(file);
+    });
+}
+
+
 
 // ======================================
 // KHỞI ĐỘNG — có retry cho Render cold start

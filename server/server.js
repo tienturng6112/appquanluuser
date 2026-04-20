@@ -321,7 +321,11 @@ app.post('/api/services', authMiddleware, async (req, res) => {
 
 app.put('/api/services/:id', authMiddleware, async (req, res) => {
     try {
-        // Có thể thêm kiểm tra quyền sở hữu detail ở đây nếu cần, tạm thời pass db update
+        const service = await db.getService(req.params.id);
+        if (!service) return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'superadmin' && service.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Không có quyền chỉnh sửa' });
+        }
         const ok = await db.updateService(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('services_changed');
@@ -333,6 +337,11 @@ app.put('/api/services/:id', authMiddleware, async (req, res) => {
 
 app.delete('/api/services/:id', authMiddleware, async (req, res) => {
     try {
+        const service = await db.getService(req.params.id);
+        if (!service) return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'superadmin' && service.ownerId !== req.user.id) {
+            return res.status(403).json({ error: 'Không có quyền xóa' });
+        }
         const ok = await db.deleteService(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('services_changed');

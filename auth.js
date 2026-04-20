@@ -103,7 +103,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         }, 600);
 
     } catch (err) {
-        errorEl.innerHTML = `<i class="ph ph-warning-circle"></i> Lỗi kết nối server`;
+        errorEl.innerHTML = `<i class="ph ph-warning-circle"></i> Lỗi kết nối server (${err.message || err})`;
         btn.disabled = false;
         btn.innerHTML = '<span>Đăng Nhập</span><i class="ph ph-sign-in"></i>';
     }
@@ -171,7 +171,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         }, 1500);
 
     } catch (err) {
-        errorEl.innerHTML = `<i class="ph ph-warning-circle"></i> Lỗi kết nối server`;
+        errorEl.innerHTML = `<i class="ph ph-warning-circle"></i> Lỗi kết nối server (${err.message || err})`;
         btn.disabled = false;
         btn.innerHTML = '<span>Đăng Ký</span><i class="ph ph-user-plus"></i>';
     }

@@ -136,7 +136,10 @@
 
                 <div class="actions-bar">
                     <h1 class="page-title" id="mainTitle">Danh Sách Khách Hàng</h1>
-                    <div style="display: flex; gap: 12px;">
+                    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn-secondary" id="downloadTemplateBtn" style="border-color: #8b5cf6; color: #8b5cf6; padding: 8px 12px;" title="Tải mẫu nhập"><i class="ph ph-download-simple"></i> Tải Mẫu</button>
+                        <button class="btn-secondary" id="importExcelBtn" style="border-color: #f59e0b; color: #f59e0b;"><i class="ph ph-upload-simple"></i> Nhập Excel</button>
+                        <input type="file" id="importExcelInput" accept=".xlsx, .xls" style="display: none;">
                         <button class="btn-secondary" id="exportExcelBtn" style="border-color: #10b981; color: #10b981;"><i class="ph ph-file-xls"></i> Xuất Excel</button>
                         <button class="btn-primary" id="addBtn"><i class="ph ph-plus"></i> Thêm Khách Hàng</button>
                     </div>
@@ -269,9 +272,9 @@
                             <option value="Khác">Khác</option>
                         </select>
                     </div>
-                    <div class="col">
+                    <div class="col" style="display: none;">
                         <label>Người Quản Lý</label>
-                        <select id="custAdmin" required>
+                        <select id="custAdmin">
                             <!-- Users inserted here -->
                         </select>
                     </div>
