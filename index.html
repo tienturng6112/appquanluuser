@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Dashboard - Quản Lý Khách Hàng</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
@@ -91,6 +91,14 @@
                                 <!-- list data -->
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Renewal Button (Admin only) -->
+                    <div class="renew-wrapper" id="renewWrapper" style="display: none;">
+                        <button class="btn-renew" id="renewBtn" onclick="openRenewModal()" title="Gia hạn tài khoản">
+                            <i class="ph ph-crown"></i>
+                            <span id="renewDaysText" class="renew-days">-- ngày</span>
+                        </button>
                     </div>
 
                     <div style="display:flex; align-items:center; gap:12px;">
@@ -197,6 +205,7 @@
                                 <th>Hệ thống (Vai trò)</th>
                                 <th>Họ và Tên</th>
                                 <th>Tài khoản (Email)</th>
+                                <th>Hạn Sử Dụng</th>
                                 <th>Hành Động</th>
                             </tr>
                         </thead>
@@ -240,12 +249,59 @@
             </div>
 
             <!-- VIEW: SETTINGS (CÀI ĐẶT HỆ THỐNG) -->
-            <div id="viewSettings" class="view-section">
+            <div id="viewSettings" class="view-section scrollable">
                 <div class="actions-bar">
                     <h1 class="page-title">Cài Đặt Hệ Thống</h1>
                 </div>
                 
                 <div class="glass-panel" style="padding: 24px; display: flex; flex-direction: column; gap: 24px;">
+                    <!-- Phần Phê Duyệt Gia Hạn (Chỉ cho SuperAdmin) -->
+                    <div id="approvalSection" style="display: none; border-bottom: 2px solid rgba(255,255,255,0.05); padding-bottom: 30px;">
+                        <div class="settings-info" style="margin-bottom: 20px;">
+                            <h3 class="settings-title" style="color: var(--primary-light);"><i class="ph ph-check-square-offset"></i> Phê Duyệt Gia Hạn Tài Khoản</h3>
+                            <p class="settings-desc">Danh sách các yêu cầu gia hạn đang chờ bạn xác nhận tiền đã vào tài khoản.</p>
+                        </div>
+                        
+                        <div id="renewalRequestList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+                            <!-- List of requests will be rendered here -->
+                        </div>
+                        <div id="emptyApprovalState" style="text-align: center; padding: 30px; color: var(--text-muted); display: none;">
+                            <i class="ph ph-seal-check" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px;"></i>
+                            <p>Không có yêu cầu nào đang chờ duyệt.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Lịch sử Phê Duyệt (Chỉ cho SuperAdmin) -->
+                    <div id="approvalHistorySection" style="display: none; padding-top: 10px;">
+                        <div class="settings-info" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div>
+                                <h3 class="settings-title" style="color: var(--text-muted);"><i class="ph ph-clock-counter-clockwise"></i> Lịch sử Phê Duyệt</h3>
+                                <p class="settings-desc">Danh sách các yêu cầu đã được xử lý gần đây.</p>
+                            </div>
+                            <button class="btn-secondary" onclick="loadRenewalHistory()" style="padding: 4px 10px; font-size: 0.8rem;"><i class="ph ph-arrows-clockwise"></i> Làm mới</button>
+                        </div>
+                        
+                        <div class="table-container history-table" style="max-height: 350px; overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); position: relative;">
+                            <table style="font-size: 0.85rem; border-collapse: separate; border-spacing: 0;">
+                                <thead style="position: sticky; top: 0; background: #131a26; z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+                                    <tr>
+                                        <th style="padding: 12px;">Thời gian</th>
+                                        <th style="padding: 12px;">Người gửi</th>
+                                        <th style="padding: 12px;">Số tiền</th>
+                                        <th style="padding: 12px;">Mã GD</th>
+                                        <th style="padding: 12px;">Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="renewalHistoryList">
+                                    <!-- History data -->
+                                </tbody>
+                            </table>
+                            <div id="emptyHistoryState" style="text-align: center; padding: 40px; color: var(--text-muted); display: none;">
+                                <p>Chưa có lịch sử phê duyệt.</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Setup Giọng Nói Mặc định -->
                     <div class="settings-row">
                         <div class="settings-info">
@@ -273,10 +329,64 @@
                         </div>
                     </div>
 
-                    <!-- Chỉ dành cho SuperAdmin -->
-                    <div id="superadminSettings" class="settings-row no-border">
+                    <!-- Cấu Hình Thanh Toán Gia Hạn -->
+                    <div id="renewalPaymentSettings" class="settings-row vertical" style="display: none;">
+                        <div class="settings-info" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                            <h3 class="settings-title" style="color: var(--warning);"><i class="ph ph-credit-card"></i> Cấu Hình Thanh Toán Gia Hạn</h3>
+                            <p class="settings-desc">Thông tin này sẽ hiển thị cho Quản trị viên khi họ thực hiện yêu cầu gia hạn tài khoản.</p>
+                        </div>
+                        
+                        <div class="settings-grid">
+                            <div class="form-group">
+                                <label><i class="ph ph-bank"></i> Tên ngân hàng</label>
+                                <input type="text" id="renewalBankName" placeholder="Ví dụ: MB Bank, Vietcombank...">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="ph ph-hash"></i> Số tài khoản</label>
+                                <input type="text" id="renewalAccountNumber" placeholder="Nhập số tài khoản ngân hàng">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="ph ph-user-circle"></i> Chủ tài khoản</label>
+                                <input type="text" id="renewalAccountHolder" placeholder="Tên chủ tài khoản (viết hoa không dấu)">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="ph ph-money"></i> Số tiền gia hạn / 30 ngày</label>
+                                <input type="text" id="renewalAmount" placeholder="Ví dụ: 200,000 VNĐ">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 10px;">
+                            <label><i class="ph ph-note"></i> Gợi ý nội dung chuyển khoản</label>
+                            <input type="text" id="renewalTransferNote" placeholder="Ví dụ: GIAHAN [email_cua_ban]">
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="ph ph-qr-code"></i> Mã QR Thanh Toán</label>
+                            <div class="qr-preview-area">
+                                <img id="renewalQrPreview" src="" style="display: none;">
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <button class="btn-primary" type="button" onclick="document.getElementById('renewalQrUpload').click()" style="padding: 10px 20px;">
+                                        <i class="ph ph-upload-simple"></i> Tải QR Mới
+                                    </button>
+                                    <button class="btn-secondary" id="removeRenewalQrBtn" type="button" onclick="removeRenewalQr()" style="display: none; border-color: rgba(244, 67, 54, 0.4); color: #f44336;">
+                                        <i class="ph ph-trash"></i> Xóa QR Hiện Tại
+                                    </button>
+                                </div>
+                                <input type="file" id="renewalQrUpload" accept="image/*" style="display: none;" onchange="previewRenewalQr(event)">
+                            </div>
+                        </div>
+
+                        <div class="settings-action-row">
+                            <button class="btn-primary" type="button" onclick="saveRenewalSettings()" style="min-width: 250px; font-weight: 600; box-shadow: 0 4px 15px rgba(0, 120, 215, 0.3);">
+                                <i class="ph ph-floppy-disk"></i> Lưu Tất Cả Cấu Hình
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Phần Mã Mời -->
+                    <div id="inviteCodeSection" class="settings-row no-border" style="display: flex !important;">
                         <div class="settings-info">
-                            <h3 class="settings-title superadmin-only"><i class="ph ph-shield-check"></i> Cấu Hình Mã Mời (Chỉ SuperAdmin)</h3>
+                            <h3 class="settings-title"><i class="ph ph-shield-check"></i> Cấu Hình Mã Mời Đăng Ký</h3>
                             <p class="settings-desc">Mã bảo mật cho phép thành viên tự đăng ký làm quản trị viên. Hãy gửi mã này cho những người bạn muốn thêm vào hệ thống quản lý.</p>
                         </div>
                         <div class="invite-code-container">
@@ -525,7 +635,92 @@
             </form>
         </div>
     </div>
-    <script src="script.js?v=8"></script>
+    <!-- Renewal Payment Modal -->
+    <div class="modal-overlay" id="renewModal" style="z-index: 10001;">
+        <div class="modal-content glass-panel-modal" style="max-width: 520px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                <h3 style="display:flex;align-items:center;gap:8px;"><i class="ph ph-crown" style="color: var(--warning);"></i> Gia Hạn Tài Khoản</h3>
+                <i class="ph ph-x" onclick="closeRenewModal()"></i>
+            </div>
+            <div style="padding: 20px; display:flex; flex-direction:column; gap:20px; max-height: 75vh; overflow-y: auto;">
+                <!-- Account Status -->
+                <div class="renew-status-card">
+                    <div class="renew-status-icon"><i class="ph ph-user-circle"></i></div>
+                    <div class="renew-status-info">
+                        <span class="renew-status-name" id="renewUserName">---</span>
+                        <span class="renew-status-expiry" id="renewExpiry">---</span>
+                    </div>
+                    <div class="renew-days-badge safe" id="renewDaysBadge">--</div>
+                </div>
+
+                <!-- Payment Info -->
+                <div class="renew-payment-section">
+                    <h4><i class="ph ph-money"></i> Thông Tin Thanh Toán</h4>
+                    <div class="payment-amount">
+                        <span class="amount-label">Phí gia hạn 30 ngày:</span>
+                        <span class="amount-value" id="renewAmountDisplay">200,000 VNĐ</span>
+                    </div>
+                    <div class="payment-bank-info">
+                        <div class="bank-row"><strong>Ngân hàng:</strong> <span id="renewBankName">MB Bank</span></div>
+                        <div class="bank-row"><strong>Số tài khoản:</strong> <span id="renewAccountNumber">0389 198 373</span></div>
+                        <div class="bank-row"><strong>Chủ tài khoản:</strong> <span id="renewAccountHolder">ADMIN SYSTEM</span></div>
+                        <div class="bank-row"><strong>Nội dung CK:</strong> <span id="renewTransferContent" style="color:var(--primary-light);font-weight:600;">GIAHAN_---</span></div>
+                    </div>
+                    <div class="qr-code-area" id="renewQrArea">
+                        <i class="ph ph-qr-code" id="renewQrPlaceholder" style="font-size: 4rem; color: #333;"></i>
+                        <img id="renewQrImage" src="" style="max-width: 200px; max-height: 200px; display: none; border-radius: 8px;">
+                        <small>Quét mã QR để thanh toán nhanh</small>
+                    </div>
+                </div>
+
+                <!-- Transaction Reference (tùy chọn) -->
+                <div class="form-group">
+                    <label>Mã giao dịch <span style="color: var(--text-muted); font-size:0.8rem;">(tùy chọn)</span></label>
+                    <input type="text" id="renewTransRef" placeholder="Nhập mã giao dịch từ ngân hàng">
+                </div>
+
+                <!-- Payment Proof Upload -->
+                <div class="form-group">
+                    <label>Ảnh xác nhận thanh toán <span style="color: var(--text-muted); font-size:0.8rem;">(chụp màn hình chuyển khoản)</span></label>
+                    <div class="payment-proof-upload">
+                        <input type="file" id="paymentProofInput" accept="image/*" style="display: none;" onchange="previewPaymentProof(event)">
+                        <div class="proof-placeholder" id="proofPlaceholder" onclick="document.getElementById('paymentProofInput').click()">
+                            <i class="ph ph-camera"></i>
+                            <span>Nhấn để tải ảnh xác nhận</span>
+                        </div>
+                        <div id="proofPreviewContainer" style="display: none; position: relative;">
+                            <img id="paymentProofPreview" src="" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: contain;">
+                            <button type="button" class="btn-remove-proof" onclick="removePaymentProof()" title="Xóa ảnh"><i class="ph ph-x-circle"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeRenewModal()">Đóng</button>
+                    <button type="button" class="btn-primary btn-renew-submit" onclick="submitRenewal()">
+                        <i class="ph ph-check-circle"></i> Xác Nhận Gia Hạn
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expired Account Overlay -->
+    <div class="expired-overlay" id="expiredOverlay" style="display: none;">
+        <div class="expired-card glass-panel-modal">
+            <div style="font-size: 4rem; margin-bottom: 16px;">⏰</div>
+            <h2 style="color: var(--danger); margin-bottom: 8px;">Tài Khoản Đã Hết Hạn</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px; line-height: 1.6;">Tài khoản quản trị của bạn đã hết hạn sử dụng.<br>Dữ liệu của bạn vẫn được bảo toàn an toàn.<br>Vui lòng gia hạn để tiếp tục truy cập.</p>
+            <button class="btn-primary btn-renew-submit" onclick="openRenewModal()" style="width: 100%; padding: 14px; font-size: 1.05rem; margin-bottom: 12px;">
+                <i class="ph ph-crown"></i> Gia Hạn Ngay
+            </button>
+            <button class="btn-secondary" onclick="logoutExpired()" style="width: 100%; padding: 12px;">
+                <i class="ph ph-sign-out"></i> Đăng Xuất
+            </button>
+        </div>
+    </div>
+
+    <script src="script.js?v=9"></script>
 </body>
 
 </html>

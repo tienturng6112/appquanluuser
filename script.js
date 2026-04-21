@@ -260,7 +260,11 @@ function getHeaders() {
 
 async function apiGet(path) {
     const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+        let msg = res.status;
+        try { const data = await res.json(); if (data.error) msg = data.error; } catch (e) {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -270,7 +274,11 @@ async function apiPost(path, data) {
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+        let msg = res.status;
+        try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -280,7 +288,11 @@ async function apiPut(path, data) {
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+        let msg = res.status;
+        try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -289,7 +301,11 @@ async function apiDelete(path) {
         method: 'DELETE',
         headers: getHeaders()
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+        let msg = res.status;
+        try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -329,8 +345,15 @@ async function fsUpdateNotification(id, data) {
     catch (e) { console.error(e); }
 }
 async function fsDeleteReadNotifications() {
-    try { await apiDelete('/notifications/read'); }
-    catch (e) { showToast('❌ Lỗi xoá thông báo: ' + e.message); console.error(e); }
+    try { 
+        await apiDelete('/notifications/read'); 
+        showToast('🗑️ Đã xoá các thông báo đã đọc.');
+    }
+    catch (e) { 
+        showToast('❌ Lỗi xoá thông báo: ' + e.message); 
+        console.error(e); 
+        throw e;
+    }
 }
 async function fsAddService(data) {
     try { const r = await apiPost('/services', data); showToast('✅ Đã lưu Dịch Vụ!'); return r.id; }
@@ -631,17 +654,26 @@ function renderPersonnel() {
         if (a.role === 'superadmin') roleLabel = '<span class="badge" style="background:var(--primary); color:white;">Admin (Tổng)</span>';
         else if (a.role === 'admin') roleLabel = '<span class="badge warning">Quản Trị Viên</span>';
         else roleLabel = '<span class="badge safe">Nhân Viên</span>';
-        const tr = document.createElement('tr');
-        
-        // Nút xem khách hàng (chỉ superadmin mới thấy)
-        let viewCustBtn = '';
-        if (currentUser && currentUser.role === 'superadmin') {
-            viewCustBtn = `<button class="btn-icon" onclick="viewAdminCustomers('${a.id}', '${a.fullName.replace(/'/g, "\\'")}')" title="Xem khách hàng" style="color:var(--primary);"><i class="ph ph-users-three"></i></button>`;
+        // Tính toán hạn sử dụng
+        let expiryDisplay = '<span style="color:var(--text-muted)">-</span>';
+        if (a.role !== 'superadmin' && a.accountExpiry) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const exp = new Date(a.accountExpiry); exp.setHours(0,0,0,0);
+            const dl = Math.ceil((exp - today) / 86400000);
+            
+            if (dl < 0) expiryDisplay = `<span class="badge danger">Hết hạn (${Math.abs(dl)} ngày)</span>`;
+            else if (dl === 0) expiryDisplay = `<span class="badge danger">Hết hạn hôm nay</span>`;
+            else if (dl <= 5) expiryDisplay = `<span class="badge warning">Còn ${dl} ngày</span>`;
+            else expiryDisplay = `<span class="badge safe">Còn ${dl} ngày</span>`;
+        } else if (a.role === 'superadmin') {
+            expiryDisplay = '<span class="badge" style="background:rgba(255,255,255,0.05); color:var(--text-muted);">Vô thời hạn</span>';
         }
-        
+
         tr.innerHTML = `
             <td>${roleLabel}</td>
-            <td><strong>${a.fullName}</strong></td><td>${a.email}</td>
+            <td><strong>${a.fullName}</strong></td>
+            <td>${a.email}</td>
+            <td>${expiryDisplay}</td>
             <td class="action-btns">
                 ${viewCustBtn}
                 <button class="btn-icon" onclick="editUser('${a.id}')" title="Sửa"><i class="ph ph-pencil-simple"></i></button>
@@ -760,7 +792,6 @@ window.clearReadNotifications = async function () {
         return;
     }
     await fsDeleteReadNotifications();
-    showToast('🗑️ Đã xoá các thông báo đã đọc.');
 }
 
 document.addEventListener('click', e => {
@@ -1148,23 +1179,36 @@ function applyRolePermissions() {
     if (currentUser.role === 'superadmin') {
         const navSettings = document.getElementById('navSettings');
         if (navSettings) navSettings.style.display = 'block';
-        const superadminSettings = document.getElementById('superadminSettings');
-        if (superadminSettings) superadminSettings.style.display = 'flex';
+
+        // Hiển thị Mã Mời (ID mới)
+        const inviteDiv = document.getElementById('inviteCodeSection');
+        if (inviteDiv) inviteDiv.setAttribute('style', 'display: flex !important');
         fetchInviteCode();
+
+        // Hiển thị Cấu hình Thanh toán
+        const renewalDiv = document.getElementById('renewalPaymentSettings');
+        if (renewalDiv) renewalDiv.setAttribute('style', 'display: flex !important');
+        loadRenewalSettingsForm();
     } else {
-        // Ẩn nút Thêm Nhân Sự đối với Quản trị viên thường
-        const adminBtn = document.getElementById('addAdminBtn');
-        if (adminBtn) adminBtn.style.display = 'none';
-        
-        // Cập nhật giao diện ẩn Setting và Nhân Sự
+        // Quản trị viên (admin) hoặc Nhân viên (staff): ẩn hoàn toàn
         const navSettings = document.getElementById('navSettings');
         if (navSettings) navSettings.style.display = 'none';
-        const statAdmins = document.getElementById('statAdmins');
-        if (statAdmins) statAdmins.closest('.stat-card').style.display = 'none';
-        const thAdminColumn = document.getElementById('thAdminColumn');
-        if (thAdminColumn) thAdminColumn.style.display = 'none';
-        const superadminSettings = document.getElementById('superadminSettings');
-        if (superadminSettings) superadminSettings.style.display = 'none';
+        
+        const inviteDiv = document.getElementById('inviteCodeSection');
+        if (inviteDiv) inviteDiv.style.display = 'none';
+
+        if (currentUser.role === 'admin') {
+            // Ẩn các phần nhân sự/số liệu admin cấp trên cho tài khoản quản trị viên
+            const adminBtn = document.getElementById('addAdminBtn');
+            if (adminBtn) adminBtn.style.display = 'none';
+            const statAdmins = document.getElementById('statAdmins');
+            if (statAdmins) {
+                const card = statAdmins.closest('.stat-card');
+                if (card) card.style.display = 'none';
+            }
+            const thAdmin = document.getElementById('thAdminColumn');
+            if (thAdmin) thAdmin.style.display = 'none';
+        }
     }
 }
 
@@ -1343,6 +1387,9 @@ async function init() {
         // Phân quyền sau khi đã cập nhật bộ nhớ
         applyRolePermissions();
 
+        // Kiểm tra trạng thái gia hạn tài khoản (Admin only)
+        await checkAccountStatus();
+
         // Tải dữ liệu ban đầu (auto-filter theo ownership)
         await reloadCustomers();
         await reloadServices();
@@ -1401,6 +1448,355 @@ async function init() {
             showToast("❌ Không thể kết nối Server. Hãy tải lại trang.");
         }
     }
+}
+
+// ======================================
+// ACCOUNT RENEWAL SYSTEM (Gia Hạn Tài Khoản)
+// ======================================
+let accountStatus = null;
+
+async function checkAccountStatus() {
+    if (!currentUser) return;
+    
+    // Nếu là superadmin, cho phép xem danh sách chờ duyệt & lịch sử
+    if (currentUser.role === 'superadmin') {
+        loadPendingRenewals();
+        loadRenewalHistory();
+        return;
+    }
+
+    try {
+        accountStatus = await apiGet('/account/status');
+        const renewWrapper = document.getElementById('renewWrapper');
+        const renewBtn = document.getElementById('renewBtn');
+        const renewDaysEl = document.getElementById('renewDaysText');
+
+        if (renewWrapper) renewWrapper.style.display = 'flex';
+
+        if (accountStatus && accountStatus.daysLeft !== undefined) {
+            if (renewDaysEl) {
+                renewDaysEl.textContent = accountStatus.daysLeft > 0
+                    ? `${accountStatus.daysLeft} ngày`
+                    : 'Hết hạn';
+            }
+
+            if (accountStatus.isExpired) {
+                if (renewBtn) renewBtn.classList.add('urgent');
+                const overlay = document.getElementById('expiredOverlay');
+                if (overlay) overlay.style.display = 'flex';
+            } else if (accountStatus.isExpiring) {
+                if (renewBtn) renewBtn.classList.add('urgent');
+                showToast(`⚠️ Tài khoản của bạn sắp hết hạn trong ${accountStatus.daysLeft} ngày! Hãy gia hạn sớm.`);
+            } else {
+                if (renewBtn) renewBtn.classList.remove('urgent');
+            }
+        }
+    } catch (e) {
+        console.warn('Không thể kiểm tra trạng thái tài khoản:', e);
+    }
+}
+
+window.loadPendingRenewals = async function() {
+    const list = document.getElementById('renewalRequestList');
+    const section = document.getElementById('approvalSection');
+    const empty = document.getElementById('emptyApprovalState');
+    if (!list || !section) return;
+
+    try {
+        const reqs = await apiGet('/renewal/pending');
+        section.style.display = 'block';
+        
+        if (!reqs.length) {
+            list.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+
+        empty.style.display = 'none';
+        list.innerHTML = reqs.map(r => `
+            <div class="glass-panel" style="padding: 16px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 1.1rem; color: var(--primary-light);">${r.fullName}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);">${r.email}</div>
+                    </div>
+                    <div style="background: var(--warning-bg); color: var(--warning); padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600;">đ ${r.amount}</div>
+                </div>
+                
+                ${r.transactionRef ? `<div style="font-size: 0.85rem; color: var(--primary-lighter);"><strong>Mã GD:</strong> ${r.transactionRef}</div>` : '<div style="font-size: 0.85rem; color: var(--text-muted);">Mã GD: Không có</div>'}
+                
+                ${r.proofImage ? `<img src="${r.proofImage}" style="width: 100%; border-radius: 8px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);" onclick="window.open('${r.proofImage}')">` : '<div style="text-align:center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.8rem; color: var(--text-muted);">Không có hình ảnh</div>'}
+                
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Gửi lúc: ${new Date(r.createdAt).toLocaleString('vi-VN')}</div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 5px;">
+                    <button class="btn-secondary" onclick="verifyRenewal('${r.id}', 'rejected')" style="padding: 8px; font-size: 0.85rem; color: #f44336; border-color: rgba(244, 67, 54, 0.2);">Từ chối</button>
+                    <button class="btn-primary" onclick="verifyRenewal('${r.id}', 'approved')" style="padding: 8px; font-size: 0.85rem;">Phê Duyệt</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) { console.warn(e); }
+}
+
+window.loadRenewalHistory = async function() {
+    const list = document.getElementById('renewalHistoryList');
+    const section = document.getElementById('approvalHistorySection');
+    const empty = document.getElementById('emptyHistoryState');
+    if (!list || !section) return;
+
+    try {
+        const history = await apiGet('/renewal/history');
+        section.style.display = 'block';
+        
+        if (!history || !history.length) {
+            list.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+
+        empty.style.display = 'none';
+        list.innerHTML = history.map(r => {
+            const statusLabel = r.status === 'approved' 
+                ? '<span class="badge safe" style="font-size:0.7rem;">Thành công</span>' 
+                : '<span class="badge danger" style="font-size:0.7rem;">Từ chối</span>';
+            
+            return `
+                <tr>
+                    <td style="color:var(--text-muted);">${new Date(r.createdAt).toLocaleString('vi-VN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
+                    <td><strong>${r.fullName}</strong></td>
+                    <td style="color:var(--warning); font-weight:600;">${r.amount}</td>
+                    <td style="font-family:monospace; font-size:0.75rem;">${r.transactionRef || '-'}</td>
+                    <td>${statusLabel}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) { console.warn(e); }
+}
+
+window.verifyRenewal = async function(id, status) {
+    const actionText = status === 'approved' ? 'Phê duyệt' : 'Từ chối';
+    if (!await showConfirm(`Bạn có chắc muốn ${actionText} yêu cầu gia hạn này?`, `${actionText} Gia Hạn`, status === 'approved' ? '✅' : '❌', 'Xác Nhận')) return;
+    
+    try {
+        await apiPost('/renewal/verify', { id, status });
+        showToast(`✅ Đã ${actionText} yêu cầu thành công!`);
+        loadPendingRenewals();
+        loadRenewalHistory();
+    } catch (e) { showToast('❌ Lỗi: ' + e.message); }
+}
+
+window.openRenewModal = async function() {
+    const modal = document.getElementById('renewModal');
+    if (!modal) return;
+
+    // Điền thông tin người dùng
+    if (currentUser) {
+        const nameEl = document.getElementById('renewUserName');
+        if (nameEl) nameEl.textContent = currentUser.fullName;
+    }
+
+    // Tải cấu hình thanh toán từ server
+    try {
+        const settings = await apiGet('/settings/renewal');
+        if (settings.bankName) { const el = document.getElementById('renewBankName'); if (el) el.textContent = settings.bankName; }
+        if (settings.accountNumber) { const el = document.getElementById('renewAccountNumber'); if (el) el.textContent = settings.accountNumber; }
+        if (settings.accountHolder) { const el = document.getElementById('renewAccountHolder'); if (el) el.textContent = settings.accountHolder; }
+        if (settings.amount) { const el = document.getElementById('renewAmountDisplay'); if (el) el.textContent = settings.amount; }
+
+        const transferEl = document.getElementById('renewTransferContent');
+        if (transferEl) {
+            const note = settings.transferNote || 'GIAHAN';
+            transferEl.textContent = note + ' ' + (currentUser ? currentUser.email.split('@')[0].toUpperCase() : '');
+        }
+
+        // QR Image
+        const qrImg = document.getElementById('renewQrImage');
+        const qrPlaceholder = document.getElementById('renewQrPlaceholder');
+        if (settings.qrImage && qrImg) {
+            qrImg.src = settings.qrImage;
+            qrImg.style.display = 'block';
+            if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+        } else {
+            if (qrImg) qrImg.style.display = 'none';
+            if (qrPlaceholder) qrPlaceholder.style.display = 'block';
+        }
+    } catch (e) {
+        console.warn('Không thể tải cấu hình thanh toán:', e);
+    }
+
+    // Điền trạng thái tài khoản
+    if (accountStatus) {
+        const expiryDate = accountStatus.accountExpiry
+            ? new Date(accountStatus.accountExpiry).toLocaleDateString('vi-VN')
+            : 'Chưa xác định';
+        const expiryEl = document.getElementById('renewExpiry');
+        if (expiryEl) expiryEl.textContent = 'Hết hạn: ' + expiryDate;
+
+        const badge = document.getElementById('renewDaysBadge');
+        if (badge) {
+            if (accountStatus.isExpired) {
+                badge.textContent = 'Hết hạn';
+                badge.className = 'renew-days-badge danger';
+            } else if (accountStatus.isExpiring) {
+                badge.textContent = accountStatus.daysLeft + ' ngày';
+                badge.className = 'renew-days-badge warning';
+            } else {
+                badge.textContent = accountStatus.daysLeft + ' ngày';
+                badge.className = 'renew-days-badge safe';
+            }
+        }
+    }
+
+    // Reset form
+    removePaymentProof();
+    const transRefInput = document.getElementById('renewTransRef');
+    if (transRefInput) transRefInput.value = '';
+
+    modal.classList.add('active');
+}
+
+window.closeRenewModal = function() {
+    const modal = document.getElementById('renewModal');
+    if (modal) modal.classList.remove('active');
+    removePaymentProof();
+    const input = document.getElementById('renewTransRef');
+    if (input) input.value = '';
+}
+
+window.submitRenewal = async function() {
+    const proofImgEl = document.getElementById('paymentProofPreview');
+    // Kiểm tra xem ảnh hiển thị hay không
+    const proofImage = (proofImgEl && proofImgEl.style.display !== 'none') ? proofImgEl.src : '';
+    const amount = document.getElementById('renewAmountDisplay').textContent;
+    const transRef = document.getElementById('renewTransRef') ? document.getElementById('renewTransRef').value.trim() : '';
+    
+    if (!proofImage && !transRef) {
+        showToast('⚠️ Vui lòng tải lên ảnh Bill hoặc nhập Mã giao dịch để Admin đối soát!');
+        return;
+    }
+
+    try {
+        showToast('⏳ Đang gửi yêu cầu phê duyệt...');
+        // Gửi yêu cầu gia hạn (Pending) lên server
+        await apiPost('/renewal/request', { 
+            amount, 
+            proofImage: proofImage.startsWith('data:') ? proofImage : '',
+            transactionRef: transRef
+        });
+        
+        // Đóng modal và thông báo
+        closeRenewModal();
+        showConfirm("✅ Yêu cầu gia hạn của bạn đã được gửi thành công!<br><br>Vui lòng chờ SuperAdmin kiểm tra tài khoản và phê duyệt cộng ngày cho bạn.", "Đã Gửi Yêu Cầu", "🎉", "Đã Hiểu");
+        
+        // Cập nhật lại UI để báo là đang chờ (nếu cần)
+        await checkAccountStatus();
+    } catch (e) {
+        showToast('❌ Lỗi: ' + e.message);
+    }
+}
+
+window.logoutExpired = function() {
+    localStorage.removeItem('aishop_token');
+    localStorage.removeItem('aishop_user');
+    sessionStorage.removeItem('greeted');
+    window.location.href = 'login.html';
+}
+
+// === Payment Proof Functions ===
+window.previewPaymentProof = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('❌ File quá lớn (tối đa 5MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = function() {
+        const preview = document.getElementById('paymentProofPreview');
+        const container = document.getElementById('proofPreviewContainer');
+        const placeholder = document.getElementById('proofPlaceholder');
+        if (preview) preview.src = reader.result;
+        if (container) container.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+window.removePaymentProof = function() {
+    const preview = document.getElementById('paymentProofPreview');
+    const container = document.getElementById('proofPreviewContainer');
+    const placeholder = document.getElementById('proofPlaceholder');
+    if (preview) preview.src = '';
+    if (container) container.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'flex';
+    const fileInput = document.getElementById('paymentProofInput');
+    if (fileInput) fileInput.value = '';
+}
+
+// === Renewal Settings Functions (SuperAdmin) ===
+async function loadRenewalSettingsForm() {
+    try {
+        const settings = await apiGet('/settings/renewal');
+        const fields = {
+            renewalBankName: settings.bankName,
+            renewalAccountNumber: settings.accountNumber,
+            renewalAccountHolder: settings.accountHolder,
+            renewalAmount: settings.amount,
+            renewalTransferNote: settings.transferNote,
+        };
+        for (const [id, val] of Object.entries(fields)) {
+            const el = document.getElementById(id);
+            if (el) el.value = val || '';
+        }
+        const qrPreview = document.getElementById('renewalQrPreview');
+        const removeBtn = document.getElementById('removeRenewalQrBtn');
+        if (settings.qrImage && qrPreview) {
+            qrPreview.src = settings.qrImage;
+            qrPreview.style.display = 'block';
+            if (removeBtn) removeBtn.style.display = 'inline-flex';
+        }
+    } catch (e) {
+        console.warn('Không thể tải cấu hình thanh toán:', e);
+    }
+}
+
+window.saveRenewalSettings = async function() {
+    const data = {
+        bankName: document.getElementById('renewalBankName')?.value || '',
+        accountNumber: document.getElementById('renewalAccountNumber')?.value || '',
+        accountHolder: document.getElementById('renewalAccountHolder')?.value || '',
+        amount: document.getElementById('renewalAmount')?.value || '',
+        transferNote: document.getElementById('renewalTransferNote')?.value || '',
+    };
+    const qrPreview = document.getElementById('renewalQrPreview');
+    data.qrImage = (qrPreview && qrPreview.style.display !== 'none' && qrPreview.src) ? qrPreview.src : '';
+
+    try {
+        await apiPost('/settings/renewal', data);
+        showToast('✅ Đã lưu cấu hình thanh toán gia hạn!');
+    } catch (e) {
+        showToast('❌ Lỗi: ' + e.message);
+    }
+}
+
+window.previewRenewalQr = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('❌ File quá lớn (tối đa 5MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = function() {
+        const preview = document.getElementById('renewalQrPreview');
+        if (preview) { preview.src = reader.result; preview.style.display = 'block'; }
+        const removeBtn = document.getElementById('removeRenewalQrBtn');
+        if (removeBtn) removeBtn.style.display = 'inline-flex';
+    };
+    reader.readAsDataURL(file);
+}
+
+window.removeRenewalQr = function() {
+    const preview = document.getElementById('renewalQrPreview');
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+    const removeBtn = document.getElementById('removeRenewalQrBtn');
+    if (removeBtn) removeBtn.style.display = 'none';
+    const input = document.getElementById('renewalQrUpload');
+    if (input) input.value = '';
 }
 
 // ======================================

@@ -146,6 +146,19 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 });
 
 // ======================================
+// API: ACCOUNT STATUS & RENEWAL (Gia Hạn)
+// ======================================
+app.get('/api/account/status', authMiddleware, async (req, res) => {
+    try {
+        const status = await db.getAccountStatus(req.user.id);
+        if (!status) return res.status(404).json({ error: 'Không tìm thấy tài khoản' });
+        res.json(status);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
 // API: USERS / PERSONNEL (Quản lý Nhân Sự)
 // ======================================
 app.get('/api/users', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
@@ -312,6 +325,114 @@ app.post('/api/settings/voice/custom', authMiddleware, requireRole('superadmin',
 });
 
 // API: Database Info (chỉ superadmin)
+
+// ======================================
+// API: RENEWAL SETTINGS (Cấu hình thanh toán)
+// ======================================
+app.get('/api/settings/renewal', authMiddleware, async (req, res) => {
+    try {
+        res.json({
+            bankName: await db.getSetting('renewal_bank_name') || '',
+            accountNumber: await db.getSetting('renewal_account_number') || '',
+            accountHolder: await db.getSetting('renewal_account_holder') || '',
+            amount: await db.getSetting('renewal_amount') || '',
+            transferNote: await db.getSetting('renewal_transfer_note') || '',
+            qrImage: await db.getSetting('renewal_qr_image') || ''
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings/renewal', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const { bankName, accountNumber, accountHolder, amount, transferNote, qrImage } = req.body;
+        await db.setSetting('renewal_bank_name', bankName || '');
+        await db.setSetting('renewal_account_number', accountNumber || '');
+        await db.setSetting('renewal_account_holder', accountHolder || '');
+        await db.setSetting('renewal_amount', amount || '');
+        await db.setSetting('renewal_transfer_note', transferNote || '');
+        if (qrImage !== undefined) await db.setSetting('renewal_qr_image', qrImage || '');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
+// API: PHÊ DUYỆT GIA HẠN
+// ======================================
+app.post('/api/renewal/request', authMiddleware, async (req, res) => {
+    try {
+        const { amount, proofImage, transactionRef } = req.body;
+        const payload = {
+            userId: req.user.id,
+            fullName: req.user.fullName,
+            email: req.user.email,
+            amount,
+            proofImage,
+            transactionRef: transactionRef || ''
+        };
+        const id = await db.createRenewalRequest(payload);
+        
+        // Tạo thông báo cho SuperAdmin
+        const superAdmins = await db.getAllUsers();
+        const mainAdmin = superAdmins.find(u => u.role === 'superadmin');
+        if (mainAdmin) {
+            await db.addNotification({
+                ownerId: mainAdmin.id,
+                title: '📌 Yêu cầu gia hạn mới',
+                body: `Quản trị viên ${req.user.fullName} vừa gửi yêu cầu gia hạn tài khoản.`,
+                time: new Date().toISOString()
+            });
+        }
+        
+        broadcast('notifications_changed');
+        res.status(201).json({ id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/renewal/pending', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        res.json(await db.getPendingRenewalRequests());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/renewal/history', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        res.json(await db.getRenewalRequestHistory());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/renewal/verify', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const { id, status } = req.body; // status: 'approved' hoặc 'rejected'
+        const reqData = await db.updateRenewalRequestStatus(id, status);
+        if (!reqData) return res.status(404).json({ error: 'Không tìm thấy yêu cầu' });
+        
+        // Thông báo lại cho QTV (reqData chứa đầy đủ thông tin)
+        if (reqData) {
+            await db.addNotification({
+                ownerId: reqData.userId,
+                title: status === 'approved' ? '✅ Gia hạn thành công' : '❌ Gia hạn bị từ chối',
+                body: status === 'approved' ? 'Yêu cầu gia hạn của bạn đã được Admin phê duyệt.' : 'Yêu cầu gia hạn của bạn đã bị từ chối. Vui lòng liên hệ Admin.',
+                time: new Date().toISOString()
+            });
+        }
+        
+        broadcast('notifications_changed');
+        broadcast('users_changed'); // Để cập nhật lại ngày hết hạn trên UI
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 app.get('/api/db-info', authMiddleware, requireRole('superadmin'), async (req, res) => {
     try {
         res.json(await db.getDatabaseInfo());
@@ -410,11 +531,12 @@ app.delete('/api/notifications/read', authMiddleware, async (req, res) => {
         broadcast('notifications_changed');
         res.json({ success: true });
     } catch (e) {
+        console.error('Lỗi khi xoá thông báo:', e);
         res.status(500).json({ error: e.message });
     }
 });
 
-app.put('/api/notifications/:id', async (req, res) => {
+app.put('/api/notifications/:id', authMiddleware, async (req, res) => {
     try {
         const ok = await db.updateNotification(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });

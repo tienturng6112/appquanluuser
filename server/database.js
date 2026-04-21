@@ -152,6 +152,17 @@ async function createTables() {
         `CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
+        )`,
+        `CREATE TABLE IF NOT EXISTS renewal_requests (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            fullName TEXT,
+            email TEXT,
+            amount TEXT,
+            proofImage TEXT,
+            status TEXT DEFAULT 'pending',
+            createdAt TEXT DEFAULT '',
+            transactionRef TEXT DEFAULT ''
         )`
     ];
 
@@ -175,7 +186,9 @@ async function migrateDatabase() {
         "ALTER TABLE users ADD COLUMN createdBy TEXT DEFAULT ''",
         "ALTER TABLE services ADD COLUMN ownerId TEXT DEFAULT ''",
         "ALTER TABLE notifications ADD COLUMN ownerId TEXT DEFAULT ''",
-        "ALTER TABLE customers ADD COLUMN price TEXT DEFAULT '0'"
+        "ALTER TABLE customers ADD COLUMN price TEXT DEFAULT '0'",
+        "ALTER TABLE users ADD COLUMN accountExpiry TEXT DEFAULT ''",
+        "ALTER TABLE renewal_requests ADD COLUMN transactionRef TEXT DEFAULT ''"
     ];
     for (const sql of migrations) {
         try { await execute(sql); console.log('✅ Migration:', sql); }
@@ -189,6 +202,20 @@ async function migrateDatabase() {
             "UPDATE customers SET ownerId = ? WHERE ownerId = '' OR ownerId IS NULL",
             [superAdmin.id]
         );
+    }
+
+    // Gán accountExpiry cho admin/staff chưa có (30 ngày từ hiện tại)
+    const adminsNoExpiry = await queryAll(
+        "SELECT id FROM users WHERE role IN ('admin', 'staff') AND (accountExpiry = '' OR accountExpiry IS NULL)"
+    );
+    if (adminsNoExpiry.length > 0) {
+        const freshExpiry = new Date();
+        freshExpiry.setDate(freshExpiry.getDate() + 30);
+        const expiryStr = freshExpiry.toISOString();
+        for (const u of adminsNoExpiry) {
+            await execute('UPDATE users SET accountExpiry = ? WHERE id = ?', [expiryStr, u.id]);
+        }
+        console.log(`✅ Đã gán hạn sử dụng 30 ngày cho ${adminsNoExpiry.length} tài khoản.`);
     }
 }
 
@@ -494,9 +521,20 @@ async function createUser(data) {
     const existing = await queryOne('SELECT id FROM users WHERE email = ?', [data.email]);
     if (existing) return { error: 'Email đã tồn tại' };
     const id = uuidv4();
+    const now = new Date();
+    const createdAt = now.toISOString();
+
+    // Tính ngày hết hạn tài khoản (30 ngày cho admin/staff, không giới hạn cho superadmin)
+    let accountExpiry = '';
+    if (data.role !== 'superadmin') {
+        const expiry = new Date(now);
+        expiry.setDate(expiry.getDate() + 30);
+        accountExpiry = expiry.toISOString();
+    }
+
     await execute(
-        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', new Date().toISOString(), data.createdBy || '']
+        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt, createdBy, accountExpiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', createdAt, data.createdBy || '', accountExpiry]
     );
     return { id };
 }
@@ -513,9 +551,9 @@ async function getUserById(id) {
 
 async function getAllUsers(createdBy = null) {
     if (createdBy) {
-        return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy FROM users WHERE createdBy = ?', [createdBy]);
+        return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy, accountExpiry FROM users WHERE createdBy = ?', [createdBy]);
     }
-    return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy FROM users');
+    return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy, accountExpiry FROM users');
 }
 
 async function updateUserRole(id, role) {
@@ -566,12 +604,84 @@ async function getSession(token) {
     if (!token) return null;
     const session = await queryOne('SELECT * FROM sessions WHERE token = ?', [token]);
     if (!session) return null;
-    const user = await queryOne('SELECT id, fullName, email, role, createdAt FROM users WHERE id = ?', [session.userId]);
+    const user = await queryOne('SELECT id, fullName, email, role, createdAt, accountExpiry FROM users WHERE id = ?', [session.userId]);
     return user || null;
 }
 
 async function deleteSession(token) {
     await execute('DELETE FROM sessions WHERE token = ?', [token]);
+}
+
+// ======================================
+// ACCOUNT RENEWAL (Gia Hạn Tài Khoản)
+// ======================================
+async function getAccountStatus(userId) {
+    const user = await queryOne('SELECT id, fullName, email, role, createdAt, accountExpiry FROM users WHERE id = ?', [userId]);
+    if (!user) return null;
+
+    if (user.role === 'superadmin') {
+        return { ...user, daysLeft: 999, isExpired: false, isExpiring: false };
+    }
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const expiry = user.accountExpiry ? new Date(user.accountExpiry) : null;
+    if (expiry) expiry.setHours(0, 0, 0, 0);
+    const daysLeft = expiry ? Math.ceil((expiry - now) / 86400000) : 0;
+
+    return {
+        ...user,
+        daysLeft,
+        isExpired: daysLeft <= 0,
+        isExpiring: daysLeft > 0 && daysLeft <= 3
+    };
+}
+
+async function renewAccount(userId, days = 30) {
+    const user = await queryOne('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return false;
+    if (user.role === 'superadmin') return false;
+
+    const now = new Date();
+    const currentExpiry = user.accountExpiry ? new Date(user.accountExpiry) : now;
+    const baseDate = currentExpiry > now ? currentExpiry : now;
+    baseDate.setDate(baseDate.getDate() + days);
+
+    await execute('UPDATE users SET accountExpiry = ? WHERE id = ?', [baseDate.toISOString(), userId]);
+    return true;
+}
+
+// ======================================
+// RENEWAL REQUESTS (Yêu cầu gia hạn)
+// ======================================
+async function createRenewalRequest(data) {
+    const id = uuidv4();
+    await execute(
+        'INSERT INTO renewal_requests (id, userId, fullName, email, amount, proofImage, status, createdAt, transactionRef) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.userId, data.fullName, data.email, data.amount, data.proofImage || '', 'pending', new Date().toISOString(), data.transactionRef || '']
+    );
+    return id;
+}
+
+async function getPendingRenewalRequests() {
+    return await queryAll("SELECT * FROM renewal_requests WHERE status = 'pending' ORDER BY createdAt DESC");
+}
+
+async function getRenewalRequestHistory() {
+    return await queryAll("SELECT * FROM renewal_requests WHERE status != 'pending' ORDER BY createdAt DESC LIMIT 50");
+}
+
+async function updateRenewalRequestStatus(id, status) {
+    const req = await queryOne('SELECT * FROM renewal_requests WHERE id = ?', [id]);
+    if (!req) return null;
+
+    await execute('UPDATE renewal_requests SET status = ? WHERE id = ?', [status, id]);
+    
+    if (status === 'approved') {
+        // Nếu duyệt, tự động cộng 30 ngày cho user
+        await renewAccount(req.userId, 30);
+    }
+    return req;
 }
 
 // ======================================
@@ -651,11 +761,11 @@ async function getDatabaseInfo() {
 // EXPORT
 // ======================================
 module.exports = {
-    initDatabase, execute,
+    initDatabase, execute, queryOne, queryAll,
     getAllCustomers, getCustomer, addCustomer, updateCustomer, deleteCustomer,
     getAllAdmins, addAdmin, updateAdmin, deleteAdmin,
     getAllServices, getService, addService, updateService, deleteService,
-    getAllNotifications, addNotification, updateNotification,
+    getAllNotifications, addNotification, updateNotification, deleteReadNotifications,
     getSetting, setSetting, generateInviteCode,
     getDatabaseInfo,
     // Auth
@@ -663,6 +773,9 @@ module.exports = {
     updateUserRole, updateUserProfile, deleteUser,
     verifyPassword, hashPassword,
     createSession, getSession, deleteSession,
+    // Account Renewal
+    getAccountStatus, renewAccount,
+    createRenewalRequest, getPendingRenewalRequests, updateRenewalRequestStatus, getRenewalRequestHistory,
     // Info
     get mode() { return USE_TURSO ? 'turso' : 'local'; },
     close: () => {
