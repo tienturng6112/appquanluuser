@@ -670,7 +670,7 @@ function renderPersonnel() {
             expiryDisplay = '<span class="badge" style="background:rgba(255,255,255,0.05); color:var(--text-muted);">Vô thời hạn</span>';
         }
 
-        const viewCustBtn = `<button class="btn-icon" onclick="viewUserCustomers('${a.id}', '${a.fullName}')" title="Xem khách hàng"><i class="ph ph-eye"></i></button>`;
+        const viewCustBtn = (currentUser && currentUser.role === 'superadmin') ? `<button class="btn-icon" onclick="viewAdminCustomers('${a.id}', '${a.fullName}')" title="Xem khách hàng"><i class="ph ph-eye"></i></button>` : '';
 
         tr.innerHTML = `
             <td>${roleLabel}</td>
@@ -1545,7 +1545,14 @@ window.loadRenewalHistory = async function() {
     const list = document.getElementById('renewalHistoryList');
     const section = document.getElementById('approvalHistorySection');
     const empty = document.getElementById('emptyHistoryState');
+    const btn = document.getElementById('btnRefreshHistory');
     if (!list || !section) return;
+
+    // Bắt đầu animation quay
+    if (btn) {
+        btn.classList.add('refreshing');
+        btn.disabled = true;
+    }
 
     try {
         const history = await apiGet('/renewal/history');
@@ -1554,26 +1561,60 @@ window.loadRenewalHistory = async function() {
         if (!history || !history.length) {
             list.innerHTML = '';
             empty.style.display = 'block';
-            return;
+        } else {
+            empty.style.display = 'none';
+            list.innerHTML = history.map(r => {
+                const statusLabel = r.status === 'approved' 
+                    ? '<span class="badge safe" style="font-size:0.7rem;">Thành công</span>' 
+                    : '<span class="badge danger" style="font-size:0.7rem;">Từ chối</span>';
+                
+                return `
+                    <tr>
+                        <td style="color:var(--text-muted);">${new Date(r.createdAt).toLocaleString('vi-VN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
+                        <td><strong>${r.fullName}</strong></td>
+                        <td style="color:var(--warning); font-weight:600;">${r.amount}</td>
+                        <td style="font-family:monospace; font-size:0.75rem;">${r.transactionRef || '-'}</td>
+                        <td>${statusLabel}</td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        empty.style.display = 'none';
-        list.innerHTML = history.map(r => {
-            const statusLabel = r.status === 'approved' 
-                ? '<span class="badge safe" style="font-size:0.7rem;">Thành công</span>' 
-                : '<span class="badge danger" style="font-size:0.7rem;">Từ chối</span>';
+        // Hiển thị trạng thái thành công
+        if (btn) {
+            btn.classList.remove('refreshing');
+            btn.classList.add('refreshed');
+            const icon = btn.querySelector('i');
+            const label = btn.querySelector('span');
+            if (icon) icon.className = 'ph ph-check-circle';
+            if (label) label.textContent = 'Đã cập nhật';
             
-            return `
-                <tr>
-                    <td style="color:var(--text-muted);">${new Date(r.createdAt).toLocaleString('vi-VN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
-                    <td><strong>${r.fullName}</strong></td>
-                    <td style="color:var(--warning); font-weight:600;">${r.amount}</td>
-                    <td style="font-family:monospace; font-size:0.75rem;">${r.transactionRef || '-'}</td>
-                    <td>${statusLabel}</td>
-                </tr>
-            `;
-        }).join('');
-    } catch (e) { console.warn(e); }
+            setTimeout(() => {
+                btn.classList.remove('refreshed');
+                if (icon) icon.className = 'ph ph-arrows-clockwise';
+                if (label) label.textContent = 'Làm mới';
+                btn.disabled = false;
+            }, 1800);
+        }
+    } catch (e) {
+        console.warn(e);
+        // Trạng thái lỗi
+        if (btn) {
+            btn.classList.remove('refreshing');
+            btn.classList.add('refresh-error');
+            const icon = btn.querySelector('i');
+            const label = btn.querySelector('span');
+            if (icon) icon.className = 'ph ph-warning-circle';
+            if (label) label.textContent = 'Thất bại';
+            
+            setTimeout(() => {
+                btn.classList.remove('refresh-error');
+                if (icon) icon.className = 'ph ph-arrows-clockwise';
+                if (label) label.textContent = 'Làm mới';
+                btn.disabled = false;
+            }, 2000);
+        }
+    }
 }
 
 window.verifyRenewal = async function(id, status) {
@@ -1588,9 +1629,45 @@ window.verifyRenewal = async function(id, status) {
     } catch (e) { showToast('❌ Lỗi: ' + e.message); }
 }
 
+// Tạo mã giao dịch duy nhất (2 chữ cái + 5 số, ví dụ: ZW17837)
+function generateTransCode() {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Bỏ I, O để tránh nhầm lẫn
+    const l1 = letters[Math.floor(Math.random() * letters.length)];
+    const l2 = letters[Math.floor(Math.random() * letters.length)];
+    const num = Math.floor(10000 + Math.random() * 90000); // 5 chữ số
+    return l1 + l2 + num;
+}
+
+// Copy mã giao dịch
+window.copyTransCode = function() {
+    const codeEl = document.getElementById('renewTransCode');
+    if (!codeEl) return;
+    const code = codeEl.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        const btn = document.querySelector('.trans-code-copy');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            btn.classList.add('copied');
+            if (icon) icon.className = 'ph ph-check';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                if (icon) icon.className = 'ph ph-copy';
+            }, 1500);
+        }
+        showToast('✅ Đã sao chép mã: ' + code);
+    });
+}
+
 window.openRenewModal = async function() {
     const modal = document.getElementById('renewModal');
     if (!modal) return;
+
+    // Tạo mã giao dịch mới mỗi lần mở
+    const transCode = generateTransCode();
+    const codeEl = document.getElementById('renewTransCode');
+    const refInput = document.getElementById('renewTransRef');
+    if (codeEl) codeEl.textContent = transCode;
+    if (refInput) refInput.value = transCode;
 
     // Điền thông tin người dùng
     if (currentUser) {
@@ -1601,25 +1678,43 @@ window.openRenewModal = async function() {
     // Tải cấu hình thanh toán từ server
     try {
         const settings = await apiGet('/settings/renewal');
-        if (settings.bankName) { const el = document.getElementById('renewBankName'); if (el) el.textContent = settings.bankName; }
+        
+        // Map bank code to display name
+        const bankDisplayNames = {
+            'ACB': 'ACB', 'BIDV': 'BIDV', 'VCB': 'Vietcombank', 'TCB': 'Techcombank',
+            'MB': 'MB Bank', 'VPB': 'VPBank', 'TPB': 'TPBank', 'STB': 'Sacombank',
+            'VIB': 'VIB', 'SHB': 'SHB', 'MSB': 'MSB', 'EIB': 'Eximbank',
+            'OCB': 'OCB', 'HDBank': 'HDBank', 'LPB': 'LienVietPostBank',
+            'ABB': 'ABBank', 'NAB': 'Nam A Bank', 'SCB': 'SCB',
+            'CAKE': 'CAKE', 'Ubank': 'Ubank'
+        };
+        const bankCode = settings.bankName || '';
+        const bankDisplay = bankDisplayNames[bankCode] || bankCode;
+        
+        if (bankDisplay) { const el = document.getElementById('renewBankName'); if (el) el.textContent = bankDisplay; }
         if (settings.accountNumber) { const el = document.getElementById('renewAccountNumber'); if (el) el.textContent = settings.accountNumber; }
         if (settings.accountHolder) { const el = document.getElementById('renewAccountHolder'); if (el) el.textContent = settings.accountHolder; }
-        if (settings.amount) { const el = document.getElementById('renewAmountDisplay'); if (el) el.textContent = settings.amount; }
+        if (settings.amount) { const el = document.getElementById('renewAmountDisplay'); if (el) el.textContent = formatCurrency(settings.amount.replace(/\D/g, '')) + ' VNĐ'; }
 
-        const transferEl = document.getElementById('renewTransferContent');
-        if (transferEl) {
-            const note = settings.transferNote || 'GIAHAN';
-            transferEl.textContent = note + ' ' + (currentUser ? currentUser.email.split('@')[0].toUpperCase() : '');
-        }
-
-        // QR Image
+        // Tạo QR động qua VietQR API (chứa mã giao dịch tự động)
         const qrImg = document.getElementById('renewQrImage');
         const qrPlaceholder = document.getElementById('renewQrPlaceholder');
-        if (settings.qrImage && qrImg) {
-            qrImg.src = settings.qrImage;
-            qrImg.style.display = 'block';
-            if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+        
+        const acctNum = (settings.accountNumber || '').replace(/\s/g, '');
+        const amountRaw = (settings.amount || '').replace(/\D/g, '');
+        const acctName = encodeURIComponent(settings.accountHolder || '');
+        const addInfo = encodeURIComponent(transCode);
+        
+        if (bankCode && acctNum) {
+            // VietQR API: https://img.vietqr.io/image/{bankCode}-{accountNo}-{template}.png
+            const qrUrl = `https://img.vietqr.io/image/${bankCode}-${acctNum}-compact2.png?amount=${amountRaw}&addInfo=${addInfo}&accountName=${acctName}`;
+            if (qrImg) {
+                qrImg.src = qrUrl;
+                qrImg.style.display = 'block';
+                if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+            }
         } else {
+            // Chưa cấu hình đầy đủ
             if (qrImg) qrImg.style.display = 'none';
             if (qrPlaceholder) qrPlaceholder.style.display = 'block';
         }
@@ -1650,10 +1745,31 @@ window.openRenewModal = async function() {
         }
     }
 
-    // Reset form
-    removePaymentProof();
-    const transRefInput = document.getElementById('renewTransRef');
-    if (transRefInput) transRefInput.value = '';
+    // Kiểm tra trạng thái yêu cầu gia hạn hiện tại
+    try {
+        const myStatus = await apiGet('/renewal/my-status');
+        if (myStatus && myStatus.status === 'pending') {
+            updateRenewalStepper('pending');
+            // Hiện mã giao dịch cũ đang chờ
+            if (codeEl) codeEl.textContent = myStatus.transactionRef || transCode;
+            if (refInput) refInput.value = myStatus.transactionRef || transCode;
+        } else if (myStatus && myStatus.status === 'approved') {
+            // Kiểm tra xem đã duyệt gần đây (trong 24h) thì hiển thị completed
+            const approvedTime = new Date(myStatus.createdAt);
+            const hoursSince = (Date.now() - approvedTime.getTime()) / (1000 * 60 * 60);
+            if (hoursSince < 24) {
+                updateRenewalStepper('approved');
+            } else {
+                updateRenewalStepper('ready');
+            }
+        } else if (myStatus && myStatus.status === 'rejected') {
+            updateRenewalStepper('rejected');
+        } else {
+            updateRenewalStepper('ready');
+        }
+    } catch (e) {
+        updateRenewalStepper('ready');
+    }
 
     modal.classList.add('active');
 }
@@ -1661,20 +1777,57 @@ window.openRenewModal = async function() {
 window.closeRenewModal = function() {
     const modal = document.getElementById('renewModal');
     if (modal) modal.classList.remove('active');
-    removePaymentProof();
     const input = document.getElementById('renewTransRef');
     if (input) input.value = '';
 }
 
+// Cập nhật trạng thái stepper UI
+function updateRenewalStepper(state) {
+    // state: 'ready' | 'pending' | 'approved' | 'rejected'
+    const step1 = document.getElementById('step1');
+    const step2 = document.getElementById('step2');
+    const step3 = document.getElementById('step3');
+    const line1 = document.getElementById('stepLine1');
+    const line2 = document.getElementById('stepLine2');
+    const submitBtn = document.querySelector('.btn-renew-submit');
+    
+    // Reset tất cả
+    [step1, step2, step3].forEach(s => { if(s) { s.className = 'stepper-step'; }});
+    [line1, line2].forEach(l => { if(l) l.className = 'stepper-line'; });
+
+    if (state === 'ready') {
+        // Bước 1 đang active, chưa gửi
+        if (step1) step1.classList.add('active');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.style.display = ''; }
+    } else if (state === 'pending') {
+        // Bước 1 xong, bước 2 đang chờ
+        if (step1) step1.classList.add('done');
+        if (line1) line1.classList.add('done');
+        if (step2) step2.classList.add('active', 'pending-pulse');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.style.display = 'none'; }
+    } else if (state === 'approved') {
+        // Tất cả hoàn thành
+        if (step1) step1.classList.add('done');
+        if (line1) line1.classList.add('done');
+        if (step2) step2.classList.add('done');
+        if (line2) line2.classList.add('done');
+        if (step3) step3.classList.add('done', 'complete');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.style.display = 'none'; }
+    } else if (state === 'rejected') {
+        // Bước 1 xong, bước 2 bị từ chối → cho phép gửi lại
+        if (step1) step1.classList.add('done');
+        if (line1) line1.classList.add('done');
+        if (step2) step2.classList.add('rejected');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.style.display = ''; }
+    }
+}
+
 window.submitRenewal = async function() {
-    const proofImgEl = document.getElementById('paymentProofPreview');
-    // Kiểm tra xem ảnh hiển thị hay không
-    const proofImage = (proofImgEl && proofImgEl.style.display !== 'none') ? proofImgEl.src : '';
     const amount = document.getElementById('renewAmountDisplay').textContent;
     const transRef = document.getElementById('renewTransRef') ? document.getElementById('renewTransRef').value.trim() : '';
-    
-    if (!proofImage && !transRef) {
-        showToast('⚠️ Vui lòng tải lên ảnh Bill hoặc nhập Mã giao dịch để Admin đối soát!');
+
+    if (!transRef) {
+        showToast('⚠️ Mã giao dịch bị thiếu, vui lòng đóng và mở lại form!');
         return;
     }
 
@@ -1683,15 +1836,15 @@ window.submitRenewal = async function() {
         // Gửi yêu cầu gia hạn (Pending) lên server
         await apiPost('/renewal/request', { 
             amount, 
-            proofImage: proofImage.startsWith('data:') ? proofImage : '',
+            proofImage: '',
             transactionRef: transRef
         });
         
-        // Đóng modal và thông báo
-        closeRenewModal();
-        showConfirm("✅ Yêu cầu gia hạn của bạn đã được gửi thành công!<br><br>Vui lòng chờ SuperAdmin kiểm tra tài khoản và phê duyệt cộng ngày cho bạn.", "Đã Gửi Yêu Cầu", "🎉", "Đã Hiểu");
+        // Cập nhật stepper sang trạng thái chờ duyệt
+        updateRenewalStepper('pending');
+        showToast('✅ Yêu cầu đã được gửi! Vui lòng chờ Admin phê duyệt.');
         
-        // Cập nhật lại UI để báo là đang chờ (nếu cần)
+        // Cập nhật lại UI
         await checkAccountStatus();
     } catch (e) {
         showToast('❌ Lỗi: ' + e.message);
@@ -1737,23 +1890,18 @@ window.removePaymentProof = function() {
 async function loadRenewalSettingsForm() {
     try {
         const settings = await apiGet('/settings/renewal');
+        // Bank dropdown — set selected option by value
+        const bankEl = document.getElementById('renewalBankName');
+        if (bankEl && settings.bankName) bankEl.value = settings.bankName;
+
         const fields = {
-            renewalBankName: settings.bankName,
             renewalAccountNumber: settings.accountNumber,
             renewalAccountHolder: settings.accountHolder,
             renewalAmount: settings.amount,
-            renewalTransferNote: settings.transferNote,
         };
         for (const [id, val] of Object.entries(fields)) {
             const el = document.getElementById(id);
             if (el) el.value = val || '';
-        }
-        const qrPreview = document.getElementById('renewalQrPreview');
-        const removeBtn = document.getElementById('removeRenewalQrBtn');
-        if (settings.qrImage && qrPreview) {
-            qrPreview.src = settings.qrImage;
-            qrPreview.style.display = 'block';
-            if (removeBtn) removeBtn.style.display = 'inline-flex';
         }
     } catch (e) {
         console.warn('Không thể tải cấu hình thanh toán:', e);
@@ -1761,15 +1909,15 @@ async function loadRenewalSettingsForm() {
 }
 
 window.saveRenewalSettings = async function() {
+    const bankEl = document.getElementById('renewalBankName');
     const data = {
-        bankName: document.getElementById('renewalBankName')?.value || '',
+        bankName: bankEl?.value || '',
         accountNumber: document.getElementById('renewalAccountNumber')?.value || '',
         accountHolder: document.getElementById('renewalAccountHolder')?.value || '',
         amount: document.getElementById('renewalAmount')?.value || '',
-        transferNote: document.getElementById('renewalTransferNote')?.value || '',
+        transferNote: '',  // No longer used
+        qrImage: '',       // QR is now dynamic via VietQR
     };
-    const qrPreview = document.getElementById('renewalQrPreview');
-    data.qrImage = (qrPreview && qrPreview.style.display !== 'none' && qrPreview.src) ? qrPreview.src : '';
 
     try {
         await apiPost('/settings/renewal', data);

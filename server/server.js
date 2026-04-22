@@ -394,6 +394,16 @@ app.post('/api/renewal/request', authMiddleware, async (req, res) => {
     }
 });
 
+// API: Kiểm tra trạng thái yêu cầu gia hạn của chính user
+app.get('/api/renewal/my-status', authMiddleware, async (req, res) => {
+    try {
+        const latest = await db.getUserLatestRenewal(req.user.id);
+        res.json(latest || null);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/renewal/pending', authMiddleware, requireRole('superadmin'), async (req, res) => {
     try {
         res.json(await db.getPendingRenewalRequests());

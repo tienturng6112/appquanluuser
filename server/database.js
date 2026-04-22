@@ -684,6 +684,13 @@ async function updateRenewalRequestStatus(id, status) {
     return req;
 }
 
+async function getUserLatestRenewal(userId) {
+    return await queryOne(
+        'SELECT * FROM renewal_requests WHERE userId = ? ORDER BY createdAt DESC LIMIT 1',
+        [userId]
+    );
+}
+
 // ======================================
 // SEED DATA (nếu database trống)
 // ======================================
@@ -775,7 +782,7 @@ module.exports = {
     createSession, getSession, deleteSession,
     // Account Renewal
     getAccountStatus, renewAccount,
-    createRenewalRequest, getPendingRenewalRequests, updateRenewalRequestStatus, getRenewalRequestHistory,
+    createRenewalRequest, getPendingRenewalRequests, updateRenewalRequestStatus, getRenewalRequestHistory, getUserLatestRenewal,
     // Info
     get mode() { return USE_TURSO ? 'turso' : 'local'; },
     close: () => {

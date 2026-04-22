@@ -278,7 +278,7 @@
                                 <h3 class="settings-title" style="color: var(--text-muted);"><i class="ph ph-clock-counter-clockwise"></i> Lịch sử Phê Duyệt</h3>
                                 <p class="settings-desc">Danh sách các yêu cầu đã được xử lý gần đây.</p>
                             </div>
-                            <button class="btn-secondary" onclick="loadRenewalHistory()" style="padding: 4px 10px; font-size: 0.8rem;"><i class="ph ph-arrows-clockwise"></i> Làm mới</button>
+                            <button class="btn-refresh-history" id="btnRefreshHistory" onclick="loadRenewalHistory()" title="Làm mới dữ liệu"><i class="ph ph-arrows-clockwise"></i> <span>Làm mới</span></button>
                         </div>
                         
                         <div class="table-container history-table" style="max-height: 350px; overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); position: relative;">
@@ -338,8 +338,30 @@
                         
                         <div class="settings-grid">
                             <div class="form-group">
-                                <label><i class="ph ph-bank"></i> Tên ngân hàng</label>
-                                <input type="text" id="renewalBankName" placeholder="Ví dụ: MB Bank, Vietcombank...">
+                                <label><i class="ph ph-bank"></i> Ngân hàng (VietQR)</label>
+                                <select id="renewalBankName">
+                                    <option value="">-- Chọn ngân hàng --</option>
+                                    <option value="ACB">ACB - Ngân hàng TMCP Á Châu</option>
+                                    <option value="BIDV">BIDV - Ngân hàng Đầu tư và Phát triển</option>
+                                    <option value="VCB">Vietcombank - Ngân hàng Ngoại thương</option>
+                                    <option value="TCB">Techcombank - Ngân hàng Kỹ Thương</option>
+                                    <option value="MB">MB Bank - Ngân hàng Quân Đội</option>
+                                    <option value="VPB">VPBank - Ngân hàng Việt Nam Thịnh Vượng</option>
+                                    <option value="TPB">TPBank - Ngân hàng Tiên Phong</option>
+                                    <option value="STB">Sacombank - Ngân hàng Sài Gòn Thương Tín</option>
+                                    <option value="VIB">VIB - Ngân hàng Quốc Tế</option>
+                                    <option value="SHB">SHB - Ngân hàng Sài Gòn - Hà Nội</option>
+                                    <option value="MSB">MSB - Ngân hàng Hàng Hải</option>
+                                    <option value="EIB">Eximbank - Ngân hàng Xuất Nhập Khẩu</option>
+                                    <option value="OCB">OCB - Ngân hàng Phương Đông</option>
+                                    <option value="HDBank">HDBank - Ngân hàng Phát triển TP.HCM</option>
+                                    <option value="LPB">LienVietPostBank - Bưu Điện Liên Việt</option>
+                                    <option value="ABB">ABBank - Ngân hàng An Bình</option>
+                                    <option value="NAB">Nam A Bank - Ngân hàng Nam Á</option>
+                                    <option value="SCB">SCB - Ngân hàng TMCP Sài Gòn</option>
+                                    <option value="CAKE">CAKE - Ngân hàng số CAKE by VPBank</option>
+                                    <option value="Ubank">Ubank - Ngân hàng số Ubank by VPBank</option>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label><i class="ph ph-hash"></i> Số tài khoản</label>
@@ -350,29 +372,15 @@
                                 <input type="text" id="renewalAccountHolder" placeholder="Tên chủ tài khoản (viết hoa không dấu)">
                             </div>
                             <div class="form-group">
-                                <label><i class="ph ph-money"></i> Số tiền gia hạn / 30 ngày</label>
-                                <input type="text" id="renewalAmount" placeholder="Ví dụ: 200,000 VNĐ">
+                                <label><i class="ph ph-money"></i> Số tiền gia hạn / 30 ngày (VNĐ)</label>
+                                <input type="text" id="renewalAmount" placeholder="Ví dụ: 200000">
                             </div>
                         </div>
 
-                        <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 10px;">
-                            <label><i class="ph ph-note"></i> Gợi ý nội dung chuyển khoản</label>
-                            <input type="text" id="renewalTransferNote" placeholder="Ví dụ: GIAHAN [email_cua_ban]">
-                        </div>
-
-                        <div class="form-group">
-                            <label><i class="ph ph-qr-code"></i> Mã QR Thanh Toán</label>
-                            <div class="qr-preview-area">
-                                <img id="renewalQrPreview" src="" style="display: none;">
-                                <div style="display: flex; flex-direction: column; gap: 10px;">
-                                    <button class="btn-primary" type="button" onclick="document.getElementById('renewalQrUpload').click()" style="padding: 10px 20px;">
-                                        <i class="ph ph-upload-simple"></i> Tải QR Mới
-                                    </button>
-                                    <button class="btn-secondary" id="removeRenewalQrBtn" type="button" onclick="removeRenewalQr()" style="display: none; border-color: rgba(244, 67, 54, 0.4); color: #f44336;">
-                                        <i class="ph ph-trash"></i> Xóa QR Hiện Tại
-                                    </button>
-                                </div>
-                                <input type="file" id="renewalQrUpload" accept="image/*" style="display: none;" onchange="previewRenewalQr(event)">
+                        <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 12px; padding: 14px 18px; display: flex; align-items: flex-start; gap: 10px;">
+                            <i class="ph ph-info" style="color: var(--success); font-size: 1.2rem; margin-top: 2px;"></i>
+                            <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                                <strong style="color: var(--success);">QR Tự Động:</strong> Mã QR sẽ được tạo tự động qua VietQR dựa trên thông tin ngân hàng ở trên. Mỗi lần quản trị viên mở form gia hạn, QR sẽ chứa mã giao dịch duy nhất trong nội dung chuyển khoản.
                             </div>
                         </div>
 
@@ -664,34 +672,44 @@
                         <div class="bank-row"><strong>Ngân hàng:</strong> <span id="renewBankName">MB Bank</span></div>
                         <div class="bank-row"><strong>Số tài khoản:</strong> <span id="renewAccountNumber">0389 198 373</span></div>
                         <div class="bank-row"><strong>Chủ tài khoản:</strong> <span id="renewAccountHolder">ADMIN SYSTEM</span></div>
-                        <div class="bank-row"><strong>Nội dung CK:</strong> <span id="renewTransferContent" style="color:var(--primary-light);font-weight:600;">GIAHAN_---</span></div>
+                    </div>
+
+                    <!-- Mã giao dịch tự động -->
+                    <div class="trans-code-box">
+                        <div class="trans-code-label">NỘI DUNG CHUYỂN KHOẢN</div>
+                        <div class="trans-code-value-row">
+                            <span class="trans-code-value" id="renewTransCode">------</span>
+                            <button type="button" class="trans-code-copy" onclick="copyTransCode()" title="Sao chép mã">
+                                <i class="ph ph-copy"></i>
+                            </button>
+                        </div>
+                        <div class="trans-code-hint">Mã thay đổi mỗi lần mở — vui lòng ghi đúng khi chuyển khoản</div>
                     </div>
                     <div class="qr-code-area" id="renewQrArea">
                         <i class="ph ph-qr-code" id="renewQrPlaceholder" style="font-size: 4rem; color: #333;"></i>
-                        <img id="renewQrImage" src="" style="max-width: 200px; max-height: 200px; display: none; border-radius: 8px;">
-                        <small>Quét mã QR để thanh toán nhanh</small>
+                        <img id="renewQrImage" src="" style="max-width: 260px; display: none; border-radius: 10px; background: white; padding: 4px;">
+                        <small>Quét mã QR — nội dung chuyển khoản sẽ tự động điền mã giao dịch</small>
                     </div>
                 </div>
 
-                <!-- Transaction Reference (tùy chọn) -->
-                <div class="form-group">
-                    <label>Mã giao dịch <span style="color: var(--text-muted); font-size:0.8rem;">(tùy chọn)</span></label>
-                    <input type="text" id="renewTransRef" placeholder="Nhập mã giao dịch từ ngân hàng">
-                </div>
+                <!-- Mã giao dịch tự động (ẩn) -->
+                <input type="hidden" id="renewTransRef">
 
-                <!-- Payment Proof Upload -->
-                <div class="form-group">
-                    <label>Ảnh xác nhận thanh toán <span style="color: var(--text-muted); font-size:0.8rem;">(chụp màn hình chuyển khoản)</span></label>
-                    <div class="payment-proof-upload">
-                        <input type="file" id="paymentProofInput" accept="image/*" style="display: none;" onchange="previewPaymentProof(event)">
-                        <div class="proof-placeholder" id="proofPlaceholder" onclick="document.getElementById('paymentProofInput').click()">
-                            <i class="ph ph-camera"></i>
-                            <span>Nhấn để tải ảnh xác nhận</span>
-                        </div>
-                        <div id="proofPreviewContainer" style="display: none; position: relative;">
-                            <img id="paymentProofPreview" src="" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: contain;">
-                            <button type="button" class="btn-remove-proof" onclick="removePaymentProof()" title="Xóa ảnh"><i class="ph ph-x-circle"></i></button>
-                        </div>
+                <!-- Thanh trạng thái gia hạn -->
+                <div class="renewal-stepper" id="renewalStepper">
+                    <div class="stepper-step active" id="step1">
+                        <div class="stepper-icon"><i class="ph ph-qr-code"></i></div>
+                        <span class="stepper-title">Chuyển khoản</span>
+                    </div>
+                    <div class="stepper-line" id="stepLine1"><div class="stepper-line-fill"></div></div>
+                    <div class="stepper-step" id="step2">
+                        <div class="stepper-icon"><i class="ph ph-hourglass-medium"></i></div>
+                        <span class="stepper-title">Chờ duyệt</span>
+                    </div>
+                    <div class="stepper-line" id="stepLine2"><div class="stepper-line-fill"></div></div>
+                    <div class="stepper-step" id="step3">
+                        <div class="stepper-icon"><i class="ph ph-seal-check"></i></div>
+                        <span class="stepper-title">Hoàn thành</span>
                     </div>
                 </div>
 
