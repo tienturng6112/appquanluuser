@@ -30,13 +30,19 @@ if (!currentUser) {
 } else {
     let globalCustomVoiceStr = null;
     let globalVoiceEnabled = null; // null means not loaded yet
+    let isLoadingVoiceSettings = false;
 
     window.loadVoiceSettings = async function() {
+        if (isLoadingVoiceSettings) return;
+        isLoadingVoiceSettings = true;
         try {
             const res = await apiGet('/settings/voice');
             if (res && res.enabled !== undefined) {
                 globalVoiceEnabled = res.enabled;
                 console.log('🔈 Voice Setting Loaded:', globalVoiceEnabled);
+                if (globalVoiceEnabled === false) {
+                    window.speechSynthesis.cancel(); // Dừng ngay lập tức nếu đang nói
+                }
                 const el = document.getElementById('voiceToggleCheckbox');
                 if (el) el.checked = res.enabled;
             }
@@ -50,6 +56,8 @@ if (!currentUser) {
             }
         } catch (e) {
             console.warn("Could not load voice settings", e);
+        } finally {
+            isLoadingVoiceSettings = false;
         }
     };
 
@@ -100,7 +108,7 @@ if (!currentUser) {
         const isChecked = document.getElementById('voiceToggleCheckbox').checked;
         try {
             await apiPost('/settings/voice', { enabled: isChecked });
-            showToast('✅ Đã cập nhật cài đặt đồng bộ giọng nói toàn hệ thống');
+            showToast('✅ Đã đồng bộ âm thanh tới TOÀN HỆ THỐNG');
         } catch (e) {
             showToast('❌ Lỗi: ' + e.message);
             document.getElementById('voiceToggleCheckbox').checked = !isChecked; // Restore
@@ -200,6 +208,7 @@ function initAudioContext() {
 }
 
 function playBellOnce() {
+    if (globalVoiceEnabled === false) return; // Respect global setting
     if (!audioContext || !bellBuffer || !audioUnlocked) return;
     if (audioContext.state === 'suspended') audioContext.resume();
     const src = audioContext.createBufferSource(), g = audioContext.createGain();
@@ -208,9 +217,10 @@ function playBellOnce() {
 }
 
 function startAlarmLoop() {
+    if (globalVoiceEnabled === false) return; // Respect global setting
     if (alarmInterval) return;
     playBellOnce();
-    alarmInterval = setInterval(() => { if (!isAlarmSilenced) playBellOnce(); else stopAlarmLoop(); }, 2500);
+    alarmInterval = setInterval(() => { if (!isAlarmSilenced && globalVoiceEnabled !== false) playBellOnce(); else stopAlarmLoop(); }, 2500);
 }
 
 function stopAlarmLoop() { if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; } }
@@ -432,7 +442,14 @@ function setupSSE() {
         try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'voice_settings_changed') {
-                if (window.loadVoiceSettings) window.loadVoiceSettings();
+                if (msg.payload && msg.payload.enabled !== undefined) {
+                    globalVoiceEnabled = msg.payload.enabled;
+                    const el = document.getElementById('voiceToggleCheckbox');
+                    if (el) el.checked = globalVoiceEnabled;
+                    if (globalVoiceEnabled === false) window.speechSynthesis.cancel();
+                } else {
+                    if (window.loadVoiceSettings) window.loadVoiceSettings();
+                }
             }
             if (msg.type === 'invite_code_changed') {
                 if (typeof fetchInviteCode === 'function') fetchInviteCode();
@@ -1432,11 +1449,7 @@ const MAX_INIT_RETRIES = 5;
 
 async function init() {
     try {
-        if (initRetries === 0) {
-            showToast("⏳ Đang kết nối Server...");
-        } else {
-            showToast(`⏳ Server đang khởi động... (lần ${initRetries})`);
-        }
+
 
         // Cập nhật lại role và thông tin mới nhất từ server
         try {
@@ -1489,7 +1502,6 @@ async function init() {
         }, 500);
 
         initRetries = 0;
-        showToast("✅ Kết nối Server thành công!");
     } catch (err) {
         console.error("❌ Lỗi:", err);
         

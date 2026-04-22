@@ -518,7 +518,7 @@ app.get('/api/settings/voice', authMiddleware, async (req, res) => {
 
 app.post('/api/settings/voice', authMiddleware, requireRole('superadmin', 'admin'), async (req, res) => {
     await db.setSetting('voice_enabled', req.body.enabled ? 'true' : 'false');
-    broadcast('voice_settings_changed');
+    broadcast('voice_settings_changed', { enabled: !!req.body.enabled });
     res.json({ success: true });
 });
 
