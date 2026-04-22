@@ -564,7 +564,7 @@ window.switchView = function (view, el) {
     if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderPersonnel(); }
     else if (view === 'services') { document.getElementById('viewServices').classList.add('active'); renderServices(); }
     else if (view === 'revenue') { document.getElementById('viewRevenue').classList.add('active'); renderRevenue(); }
-    else if (view === 'settings') { if (viewSettingsNode) viewSettingsNode.classList.add('active'); loadRegRequests(); }
+    else if (view === 'settings') { if (viewSettingsNode) viewSettingsNode.classList.add('active'); loadRegRequests(); loadRenewalSettingsForm(); }
     else {
         document.getElementById('viewCustomers').classList.add('active');
         currentFilterService = '';
@@ -1144,6 +1144,13 @@ searchInput.addEventListener('input', (e) => { if (currentView !== 'admins') ren
 const priceInput = document.getElementById('custPrice');
 if (priceInput) {
     priceInput.addEventListener('input', (e) => {
+        let val = e.target.value.replace(/\D/g, "");
+        e.target.value = formatCurrency(val);
+    });
+}
+const renewalAmountInput = document.getElementById('renewalAmount');
+if (renewalAmountInput) {
+    renewalAmountInput.addEventListener('input', (e) => {
         let val = e.target.value.replace(/\D/g, "");
         e.target.value = formatCurrency(val);
     });

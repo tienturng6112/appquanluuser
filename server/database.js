@@ -564,9 +564,9 @@ async function getUserById(id) {
 
 async function getAllUsers(createdBy = null) {
     if (createdBy) {
-        return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy, accountExpiry FROM users WHERE createdBy = ?', [createdBy]);
+        return await queryAll('SELECT id, fullName, email, role, plan, createdAt, createdBy, accountExpiry FROM users WHERE createdBy = ?', [createdBy]);
     }
-    return await queryAll('SELECT id, fullName, email, role, createdAt, createdBy, accountExpiry FROM users');
+    return await queryAll('SELECT id, fullName, email, role, plan, createdAt, createdBy, accountExpiry FROM users');
 }
 
 async function updateUserRole(id, role) {
@@ -617,7 +617,7 @@ async function getSession(token) {
     if (!token) return null;
     const session = await queryOne('SELECT * FROM sessions WHERE token = ?', [token]);
     if (!session) return null;
-    const user = await queryOne('SELECT id, fullName, email, role, createdAt, accountExpiry FROM users WHERE id = ?', [session.userId]);
+    const user = await queryOne('SELECT id, fullName, email, role, plan, createdAt, accountExpiry FROM users WHERE id = ?', [session.userId]);
     return user || null;
 }
 
@@ -669,7 +669,7 @@ async function deleteRegRequest(id) {
 // ACCOUNT RENEWAL (Gia Hạn Tài Khoản)
 // ======================================
 async function getAccountStatus(userId) {
-    const user = await queryOne('SELECT id, fullName, email, role, createdAt, accountExpiry FROM users WHERE id = ?', [userId]);
+    const user = await queryOne('SELECT id, fullName, email, role, plan, createdAt, accountExpiry FROM users WHERE id = ?', [userId]);
     if (!user) return null;
 
     if (user.role === 'superadmin') {
