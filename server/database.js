@@ -346,6 +346,11 @@ async function getCustomer(id) {
     return row ? formatCustomer(row) : null;
 }
 
+async function getCustomerByEmail(email, ownerId) {
+    if (!email) return null;
+    return await queryOne('SELECT * FROM customers WHERE LOWER(email) = LOWER(?) AND ownerId = ?', [email.trim(), ownerId]);
+}
+
 async function addCustomer(data) {
     const id = uuidv4();
     await execute(
@@ -531,7 +536,7 @@ function hashPassword(password) {
 }
 
 async function createUser(data) {
-    const existing = await queryOne('SELECT id FROM users WHERE email = ?', [data.email]);
+    const existing = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [data.email.trim()]);
     if (existing) return { error: 'Email đã tồn tại' };
     const id = uuidv4();
     const now = new Date();

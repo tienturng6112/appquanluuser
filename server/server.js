@@ -435,6 +435,14 @@ app.post('/api/customers', authMiddleware, async (req, res) => {
             }
         }
 
+        // Kiểm tra trùng email cho cùng một chủ sở hữu
+        if (req.body.email) {
+            const existing = await db.getCustomerByEmail(req.body.email.trim(), req.user.id);
+            if (existing) {
+                return res.status(400).json({ error: `Email "${req.body.email}" đã tồn tại trong hệ thống của bạn. Vui lòng kiểm tra lại!` });
+            }
+        }
+
         // Tự động gán ownerId = người đang đăng nhập
         req.body.ownerId = req.user.id;
         const id = await db.addCustomer(req.body);
@@ -453,6 +461,15 @@ app.put('/api/customers/:id', authMiddleware, async (req, res) => {
         if (req.user.role !== 'superadmin' && customer.ownerId !== req.user.id) {
             return res.status(403).json({ error: 'Không có quyền chỉnh sửa' });
         }
+
+        // Kiểm tra trùng email nếu email thay đổi
+        if (req.body.email && req.body.email.trim().toLowerCase() !== (customer.email || '').toLowerCase()) {
+            const existing = await db.getCustomerByEmail(req.body.email.trim(), req.user.id);
+            if (existing && existing.id !== req.params.id) {
+                return res.status(400).json({ error: `Email "${req.body.email}" đã được sử dụng bởi một khách hàng khác trong danh sách của bạn!` });
+            }
+        }
+
         const ok = await db.updateCustomer(req.params.id, req.body);
         if (!ok) return res.status(404).json({ error: 'Not found' });
         broadcast('customers_changed');
