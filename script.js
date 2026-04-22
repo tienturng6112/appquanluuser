@@ -650,6 +650,7 @@ function renderPersonnel() {
     if (!cachedPersonnel.length) { adminTable.style.display = 'none'; emptyAdminState.style.display = 'flex'; return; }
     adminTable.style.display = 'table'; emptyAdminState.style.display = 'none';
     cachedPersonnel.forEach(a => {
+        const tr = document.createElement('tr');
         let roleLabel = '';
         if (a.role === 'superadmin') roleLabel = '<span class="badge" style="background:var(--primary); color:white;">Admin (Tổng)</span>';
         else if (a.role === 'admin') roleLabel = '<span class="badge warning">Quản Trị Viên</span>';
@@ -668,6 +669,8 @@ function renderPersonnel() {
         } else if (a.role === 'superadmin') {
             expiryDisplay = '<span class="badge" style="background:rgba(255,255,255,0.05); color:var(--text-muted);">Vô thời hạn</span>';
         }
+
+        const viewCustBtn = `<button class="btn-icon" onclick="viewUserCustomers('${a.id}', '${a.fullName}')" title="Xem khách hàng"><i class="ph ph-eye"></i></button>`;
 
         tr.innerHTML = `
             <td>${roleLabel}</td>
@@ -1206,8 +1209,8 @@ function applyRolePermissions() {
                 const card = statAdmins.closest('.stat-card');
                 if (card) card.style.display = 'none';
             }
-            const thAdmin = document.getElementById('thAdminColumn');
-            if (thAdmin) thAdmin.style.display = 'none';
+            // const thAdmin = document.getElementById('thAdminColumn');
+            // if (thAdmin) thAdmin.style.display = 'none';
         }
     }
 }
