@@ -402,6 +402,30 @@
                             <button class="btn-primary" onclick="regenerateInviteCode()"><i class="ph ph-arrows-clockwise"></i> Tạo Mã Mới</button>
                         </div>
                     </div>
+
+                    <!-- Yêu Cầu Đăng Ký Mới -->
+                    <div id="regRequestsSection" class="settings-row vertical no-border" style="display: none;">
+                        <div class="settings-info" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                            <h3 class="settings-title" style="color: var(--primary-lighter);"><i class="ph ph-user-plus"></i> Yêu Cầu Đăng Ký Tài Khoản</h3>
+                            <p class="settings-desc">Danh sách khách hàng đã gửi yêu cầu đăng ký từ trang chủ. Xác nhận thanh toán và gửi mã mời để họ kích hoạt tài khoản.</p>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
+                            <button class="btn-secondary" onclick="loadRegRequests()" style="font-size: 0.85rem; padding: 8px 14px;">
+                                <i class="ph ph-arrows-clockwise"></i> Làm mới
+                            </button>
+                            <select id="regRequestFilter" onchange="loadRegRequests()" style="padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary);">
+                                <option value="">Tất cả</option>
+                                <option value="pending">⏳ Chờ xử lý</option>
+                                <option value="sent">✅ Đã gửi mã</option>
+                                <option value="rejected">❌ Từ chối</option>
+                            </select>
+                        </div>
+                        <div id="regRequestsList" style="display: flex; flex-direction: column; gap: 12px;">
+                            <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+                                <i class="ph ph-spinner" style="font-size: 1.5rem;"></i> Đang tải...
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -719,6 +743,36 @@
                         <i class="ph ph-check-circle"></i> Xác Nhận Gia Hạn
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== REGISTRATION APPROVAL MODAL ====== -->
+    <div class="modal-overlay" id="regApprovalOverlay" style="display:none; z-index:1500;">
+        <div class="modal-container glass-panel-modal" style="max-width:500px; width:95%;">
+            <div class="modal-header" style="border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:14px; margin-bottom:18px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#3B4FBF,#5B6FDF);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🆕</div>
+                    <div>
+                        <h3 style="margin:0;font-size:1.1rem;color:var(--text-primary);">Phê Duyệt Đăng Ký Tài Khoản</h3>
+                        <p style="margin:0;font-size:0.8rem;color:var(--text-muted);">Xác nhận thanh toán và gửi mã mời</p>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="closeRegApprovalModal()"><i class="ph ph-x"></i></button>
+            </div>
+
+            <div id="regApprovalContent">
+                <!-- Filled by JS -->
+            </div>
+
+            <div class="modal-actions" style="margin-top:18px;">
+                <button class="btn-secondary" onclick="closeRegApprovalModal()">Đóng</button>
+                <button class="btn-secondary" id="rejectRegBtn" onclick="approveRegRequest('rejected')" style="color:var(--danger);border-color:var(--danger);">
+                    <i class="ph ph-x-circle"></i> Từ chối
+                </button>
+                <button class="btn-primary" id="approveRegBtn" onclick="approveRegRequest('sent')">
+                    <i class="ph ph-check-circle"></i> Phê duyệt & Sao chép mã
+                </button>
             </div>
         </div>
     </div>

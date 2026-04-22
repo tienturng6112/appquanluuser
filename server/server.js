@@ -2,20 +2,74 @@
 // EXPRESS SERVER — AISHOP DASHBOARD
 // Hỗ trợ: Turso Cloud + SQL.js Local
 // ======================================
-require('dotenv').config(); // Load biến môi trường từ .env
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const nodemailer = require('nodemailer');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ====== EMAIL SERVICE ======
+function createMailTransporter() {
+    if (!process.env.MAIL_USER || process.env.MAIL_USER === 'your_gmail@gmail.com') return null;
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS }
+    });
+}
+
+async function sendInviteCodeEmail({ toEmail, toName, inviteCode, plan }) {
+    const transporter = createMailTransporter();
+    if (!transporter) {
+        console.warn('⚠️ Email chưa cấu hình (MAIL_USER chưa được set trong .env)');
+        return false;
+    }
+    const fromName = process.env.MAIL_FROM_NAME || 'AISHOP Dashboard';
+    const mailOptions = {
+        from: `"${fromName}" <${process.env.MAIL_USER}>`,
+        to: toEmail,
+        subject: '✅ Mã mời đăng ký tài khoản AISHOP',
+        html: `
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#f7f9fc;padding:32px;border-radius:16px;">
+            <div style="text-align:center;margin-bottom:24px;">
+                <div style="font-size:2.5rem;">🎉</div>
+                <h2 style="color:#1a1a2e;margin:8px 0;">Thanh toán đã được xác nhận!</h2>
+                <p style="color:#718096;">Xin chào <strong>${toName}</strong>, yêu cầu đăng ký của bạn đã được phê duyệt.</p>
+            </div>
+            <div style="background:#fff;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+                <p style="color:#718096;font-size:0.9rem;margin-bottom:8px;">Mã mời đăng ký của bạn:</p>
+                <div style="font-size:2.5rem;font-weight:900;letter-spacing:8px;color:#3B4FBF;background:#f0f4ff;padding:16px;border-radius:10px;">${inviteCode}</div>
+                <p style="color:#718096;font-size:0.8rem;margin-top:8px;">Đây là gói: <strong>${plan || 'AISHOP'}</strong></p>
+            </div>
+            <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:20px;">
+                <p style="color:#1a1a2e;font-weight:600;margin-bottom:8px;">Hướng dẫn đăng ký:</p>
+                <ol style="color:#4a5568;font-size:0.9rem;padding-left:20px;line-height:1.8;">
+                    <li>Truy cập trang đăng nhập của AISHOP</li>
+                    <li>Chọn <strong>"Tạo tài khoản mới"</li>
+                    <li>Nhập mã mời: <strong style="color:#3B4FBF">${inviteCode}</strong></li>
+                    <li>Điền thông tin và hoàn thành đăng ký</li>
+                </ol>
+            </div>
+            <p style="text-align:center;color:#a0aec0;font-size:0.8rem;">— Đội ngũ AISHOP —</p>
+        </div>`
+    };
+    await transporter.sendMail(mailOptions);
+    return true;
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve landing.html as the default homepage
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'landing.html'));
+});
 
 // Serve static files (HTML, CSS, JS) từ thư mục gốc
 app.use(express.static(path.join(__dirname, '..')));
@@ -86,6 +140,132 @@ function requireRole(...roles) {
 }
 
 // ======================================
+// API: ĐĂNG KÝ MỚI TỪ LANDING PAGE (public + admin mgmt)
+// ======================================
+app.post('/api/register-request', async (req, res) => {
+    try {
+        const { plan, transactionCode } = req.body;
+        if (!transactionCode) {
+            return res.status(400).json({ error: 'Thiếu mã giao dịch' });
+        }
+        // Lưu vào DB (dùng transactionCode làm name, email/phone để trống '-').
+        const reqId = await db.createRegRequest({ name: transactionCode, email: '-', phone: '-', plan });
+        
+        // Gửi thông báo cho superadmin
+        const allUsers = await db.getAllUsers();
+        const superAdmin = allUsers.find(u => u.role === 'superadmin');
+        if (superAdmin) {
+            await db.addNotification({
+                ownerId: superAdmin.id,
+                custId: reqId,   // dùng custId để link modal phê duyệt
+                title: '🆕 Yêu cầu đăng ký tài khoản mới',
+                body: `Mã GD: ${transactionCode}\n📦 ${plan || 'Chưa chọn gói'}\n→ Bấm "Phê duyệt" để cấp mã.`,
+                time: new Date().toISOString()
+            });
+            broadcast('notifications_changed');
+        }
+        broadcast('reg_requests_changed');
+        res.json({ success: true, transactionCode });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Khách hàng: Kiểm tra trạng thái yêu cầu
+app.get('/api/register-request/status/:transactionCode', async (req, res) => {
+    try {
+        const req_data = await db.getRegRequests();
+        const regReq = req_data.find(r => r.name === req.params.transactionCode);
+        if (!regReq) return res.status(404).json({ error: 'Không tìm thấy' });
+        
+        if (regReq.status === 'sent') {
+            return res.json({ status: 'sent', inviteCode: regReq.inviteCode || '' });
+        } else if (regReq.status === 'rejected') {
+            return res.json({ status: 'rejected' });
+        }
+        return res.json({ status: 'pending' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Admin: Lấy danh sách yêu cầu đăng ký
+app.get('/api/register-request', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const status = req.query.status || null;
+        res.json(await db.getRegRequests(status));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Admin: Phê duyệt và tự động gửi email mã mời
+app.post('/api/register-request/:id/approve', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const req_data = await db.getRegRequests();
+        const regReq = req_data.find(r => r.id === req.params.id);
+        if (!regReq) return res.status(404).json({ error: 'Không tìm thấy yêu cầu' });
+        if (regReq.status !== 'pending') return res.status(400).json({ error: 'Yêu cầu đã được xử lý' });
+
+        // Tạo mã mời duy nhất
+        const inviteCode = 'AI-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+        // Gửi email cho khách (chỉ nếu có email)
+        let emailSent = false;
+        if (regReq.email && regReq.email !== '-') {
+            try {
+                emailSent = await sendInviteCodeEmail({
+                    toEmail: regReq.email,
+                    toName: regReq.name,
+                    inviteCode,
+                    plan: regReq.plan
+                });
+            } catch (mailErr) {
+                console.error('❌ Lỗi gửi email:', mailErr.message);
+            }
+        }
+
+        // Cập nhật trạng thái và lưu mã mời vào yêu cầu
+        await db.updateRegRequestInviteCode(req.params.id, inviteCode);
+        broadcast('reg_requests_changed');
+
+        res.json({
+            success: true,
+            emailSent,
+            inviteCode,
+            message: emailSent
+                ? `✅ Đã phê duyệt và gửi mã mời tới ${regReq.email}`
+                : `✅ Đã phê duyệt mã giao dịch ${regReq.name}. Khách sẽ nhận mã trên màn hình đăng ký.`
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Admin: Cập nhật trạng thái (sent / rejected) — dùng cho từ chối
+app.patch('/api/register-request/:id', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const result = await db.updateRegRequestStatus(req.params.id, req.body.status);
+        if (!result) return res.status(404).json({ error: 'Không tìm thấy' });
+        broadcast('reg_requests_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Admin: Xóa yêu cầu
+app.delete('/api/register-request/:id', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        await db.deleteRegRequest(req.params.id);
+        broadcast('reg_requests_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ======================================
 // API: AUTH
 // ======================================
 app.post('/api/auth/register', async (req, res) => {
@@ -97,16 +277,17 @@ app.post('/api/auth/register', async (req, res) => {
         if (password.length < 6) {
             return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
         }
-        const currentInviteCode = await db.getSetting('admin_invite_code');
-        if (inviteCode !== currentInviteCode) {
-            return res.status(403).json({ error: 'Mã xác nhận bảo mật không đúng' });
+        // Tìm yêu cầu đăng ký bằng mã mời
+        const regReq = await db.getRegRequestByInviteCode(inviteCode);
+        if (!regReq || regReq.status !== 'sent') {
+            return res.status(403).json({ error: 'Mã xác nhận bảo mật không hợp lệ hoặc đã được sử dụng' });
         }
 
-        const result = await db.createUser({ fullName, email, password, role: 'admin' });
+        const result = await db.createUser({ fullName, email, password, role: 'admin', plan: regReq.plan });
         if (result.error) return res.status(400).json({ error: result.error });
 
-        // Tự động vô hiệu hoá mã cũ và tạo mã mới ngay sau khi có người đăng ký thành công
-        await db.generateInviteCode();
+        // Đánh dấu mã đã sử dụng
+        await db.updateRegRequestStatus(regReq.id, 'used');
         broadcast('invite_code_changed');
 
         res.status(201).json({ success: true, message: 'Đăng ký Quản Trị Viên thành công!' });
@@ -246,6 +427,14 @@ app.get('/api/customers', authMiddleware, async (req, res) => {
 
 app.post('/api/customers', authMiddleware, async (req, res) => {
     try {
+        // Kiểm tra giới hạn khách hàng theo gói (Gói cơ bản: max 200)
+        if (req.user.plan && req.user.plan.includes('cơ bản')) {
+            const currentCustomers = await db.getAllCustomers(req.user.id);
+            if (currentCustomers.length >= 200) {
+                return res.status(403).json({ error: 'Gói Cơ bản chỉ cho phép quản lý tối đa 200 khách hàng. Vui lòng nâng cấp lên Gói Pro để sử dụng không giới hạn!' });
+            }
+        }
+
         // Tự động gán ownerId = người đang đăng nhập
         req.body.ownerId = req.user.id;
         const id = await db.addCustomer(req.body);
@@ -329,7 +518,7 @@ app.post('/api/settings/voice/custom', authMiddleware, requireRole('superadmin',
 // ======================================
 // API: RENEWAL SETTINGS (Cấu hình thanh toán)
 // ======================================
-app.get('/api/settings/renewal', authMiddleware, async (req, res) => {
+app.get('/api/settings/renewal', async (req, res) => {
     try {
         res.json({
             bankName: await db.getSetting('renewal_bank_name') || '',

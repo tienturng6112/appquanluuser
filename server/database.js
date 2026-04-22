@@ -141,6 +141,7 @@ async function createTables() {
             email TEXT UNIQUE NOT NULL,
             passwordHash TEXT NOT NULL,
             role TEXT DEFAULT 'user',
+            plan TEXT DEFAULT '',
             createdAt TEXT DEFAULT '',
             createdBy TEXT DEFAULT ''
         )`,
@@ -163,6 +164,16 @@ async function createTables() {
             status TEXT DEFAULT 'pending',
             createdAt TEXT DEFAULT '',
             transactionRef TEXT DEFAULT ''
+        )`,
+        `CREATE TABLE IF NOT EXISTS registration_requests (
+            id TEXT PRIMARY KEY,
+            name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            phone TEXT DEFAULT '',
+            plan TEXT DEFAULT '',
+            status TEXT DEFAULT 'pending',
+            inviteCode TEXT DEFAULT '',
+            createdAt TEXT DEFAULT ''
         )`
     ];
 
@@ -188,7 +199,9 @@ async function migrateDatabase() {
         "ALTER TABLE notifications ADD COLUMN ownerId TEXT DEFAULT ''",
         "ALTER TABLE customers ADD COLUMN price TEXT DEFAULT '0'",
         "ALTER TABLE users ADD COLUMN accountExpiry TEXT DEFAULT ''",
-        "ALTER TABLE renewal_requests ADD COLUMN transactionRef TEXT DEFAULT ''"
+        "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT ''",
+        "ALTER TABLE renewal_requests ADD COLUMN transactionRef TEXT DEFAULT ''",
+        "ALTER TABLE registration_requests ADD COLUMN inviteCode TEXT DEFAULT ''"
     ];
     for (const sql of migrations) {
         try { await execute(sql); console.log('✅ Migration:', sql); }
@@ -533,8 +546,8 @@ async function createUser(data) {
     }
 
     await execute(
-        'INSERT INTO users (id, fullName, email, passwordHash, role, createdAt, createdBy, accountExpiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', createdAt, data.createdBy || '', accountExpiry]
+        'INSERT INTO users (id, fullName, email, passwordHash, role, plan, createdAt, createdBy, accountExpiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, data.fullName || '', data.email, hashPassword(data.password), data.role || 'user', data.plan || '', createdAt, data.createdBy || '', accountExpiry]
     );
     return { id };
 }
@@ -610,6 +623,46 @@ async function getSession(token) {
 
 async function deleteSession(token) {
     await execute('DELETE FROM sessions WHERE token = ?', [token]);
+}
+
+// ======================================
+// REGISTRATION REQUESTS (Yêu cầu đăng ký mới)
+// ======================================
+async function createRegRequest(data) {
+    const id = uuidv4();
+    await execute(
+        'INSERT INTO registration_requests (id, name, email, phone, plan, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, data.name || '', data.email || '', data.phone || '', data.plan || '', 'pending', new Date().toISOString()]
+    );
+    return id;
+}
+
+async function getRegRequests(status = null) {
+    if (status) {
+        return await queryAll('SELECT * FROM registration_requests WHERE status = ? ORDER BY createdAt DESC', [status]);
+    }
+    return await queryAll('SELECT * FROM registration_requests ORDER BY createdAt DESC');
+}
+
+async function updateRegRequestStatus(id, status) {
+    const req = await queryOne('SELECT * FROM registration_requests WHERE id = ?', [id]);
+    if (!req) return null;
+    await execute('UPDATE registration_requests SET status = ? WHERE id = ?', [status, id]);
+    return req;
+}
+
+async function updateRegRequestInviteCode(id, code) {
+    await execute('UPDATE registration_requests SET inviteCode = ?, status = ? WHERE id = ?', [code, 'sent', id]);
+    return true;
+}
+
+async function getRegRequestByInviteCode(code) {
+    return await queryOne('SELECT * FROM registration_requests WHERE inviteCode = ?', [code]);
+}
+
+async function deleteRegRequest(id) {
+    await execute('DELETE FROM registration_requests WHERE id = ?', [id]);
+    return true;
 }
 
 // ======================================
@@ -783,6 +836,8 @@ module.exports = {
     // Account Renewal
     getAccountStatus, renewAccount,
     createRenewalRequest, getPendingRenewalRequests, updateRenewalRequestStatus, getRenewalRequestHistory, getUserLatestRenewal,
+    // Registration Requests
+    createRegRequest, getRegRequests, updateRegRequestStatus, updateRegRequestInviteCode, getRegRequestByInviteCode, deleteRegRequest,
     // Info
     get mode() { return USE_TURSO ? 'turso' : 'local'; },
     close: () => {

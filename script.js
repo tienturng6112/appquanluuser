@@ -428,6 +428,9 @@ function setupSSE() {
                 cachedNotifications = await apiGet('/notifications');
                 renderNotifications();
             }
+            if (msg.type === 'reg_requests_changed') {
+                if (currentView === 'settings') loadRegRequests();
+            }
         } catch (e) { console.error('SSE message error:', e); }
     };
 
@@ -561,7 +564,7 @@ window.switchView = function (view, el) {
     if (view === 'admins') { document.getElementById('viewAdmins').classList.add('active'); renderPersonnel(); }
     else if (view === 'services') { document.getElementById('viewServices').classList.add('active'); renderServices(); }
     else if (view === 'revenue') { document.getElementById('viewRevenue').classList.add('active'); renderRevenue(); }
-    else if (view === 'settings') { if (viewSettingsNode) viewSettingsNode.classList.add('active'); }
+    else if (view === 'settings') { if (viewSettingsNode) viewSettingsNode.classList.add('active'); loadRegRequests(); }
     else {
         document.getElementById('viewCustomers').classList.add('active');
         currentFilterService = '';
@@ -811,12 +814,19 @@ function renderNotifications() {
     if (!cachedNotifications.length) {
         list.innerHTML = `<div class="notif-empty"><i class="ph ph-bell-slash" style="font-size:2rem;margin-bottom:8px;"></i><br>Chưa có thông báo</div>`;
     } else {
-        list.innerHTML = cachedNotifications.sort((a, b) => new Date(b.time) - new Date(a.time)).map(n => `
+        list.innerHTML = cachedNotifications.sort((a, b) => new Date(b.time) - new Date(a.time)).map(n => {
+            const isRegRequest = n.title && n.title.includes('Yêu cầu đăng ký');
+            const approveBtn = (isRegRequest && n.custId && currentUser?.role === 'superadmin')
+                ? `<button onclick="event.stopPropagation(); quickApproveReg('${n.custId}','${n.id}',this)" style="margin-top:8px;font-size:0.75rem;padding:6px 14px;border-radius:8px;background:linear-gradient(135deg,#3B4FBF,#5B6FDF);color:#fff;border:none;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:5px;"><i class='ph ph-check-circle'></i> Phê duyệt ngay</button>`
+                : '';
+            return `
             <div class="notif-item ${n.isRead ? '' : 'unread'}" onclick="markNotifAsRead('${n.id}')">
                 <div class="notif-title">${n.title}</div>
                 <div class="notif-body">${n.body}</div>
                 <div class="notif-time">${new Date(n.time).toLocaleString('vi-VN')}</div>
-            </div>`).join('');
+                ${approveBtn}
+            </div>`;
+        }).join('');
     }
 }
 
@@ -1192,6 +1202,11 @@ function applyRolePermissions() {
         const renewalDiv = document.getElementById('renewalPaymentSettings');
         if (renewalDiv) renewalDiv.setAttribute('style', 'display: flex !important');
         loadRenewalSettingsForm();
+
+        // Hiển thị Yêu Cầu Đăng Ký
+        const regReqDiv = document.getElementById('regRequestsSection');
+        if (regReqDiv) regReqDiv.setAttribute('style', 'display: flex !important; flex-direction: column;');
+        loadRegRequests();
     } else {
         // Quản trị viên (admin) hoặc Nhân viên (staff): ẩn hoàn toàn
         const navSettings = document.getElementById('navSettings');
@@ -2052,5 +2067,221 @@ window.exportRevenueExcel = function() {
     XLSX.writeFile(wb, `Bao_Cao_Doanh_Thu_Nam_${year}.xlsx`);
     showToast("✅ Đã xuất báo cáo doanh thu!");
 }
+
+// ======================================
+// MODAL PHÊ DUYỆT ĐĂNG KÝ
+// ======================================
+let _currentRegReqId = null;
+let _currentRegNotifId = null;
+
+window.openRegApprovalModal = async function(reqId, notifId) {
+    _currentRegReqId = reqId;
+    _currentRegNotifId = notifId;
+    const overlay = document.getElementById('regApprovalOverlay');
+    const content = document.getElementById('regApprovalContent');
+    const approveBtn = document.getElementById('approveRegBtn');
+    const rejectBtn = document.getElementById('rejectRegBtn');
+    overlay.style.display = 'flex';
+    content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);"><i class="ph ph-spinner" style="font-size:2rem;"></i><br>Đang tải...</div>';
+    try {
+        // Lấy thông tin yêu cầu
+        const allReqs = await apiGet('/register-request');
+        const req = allReqs.find(r => r.id === reqId);
+        // Lấy mã mời
+        let inviteCode = '------';
+        try { const ic = await apiGet('/settings/invite-code'); inviteCode = ic.code || '------'; } catch(_) {}
+
+        if (!req) {
+            content.innerHTML = '<div style="color:var(--danger);text-align:center;padding:20px;">❌ Yêu cầu không còn tồn tại.</div>';
+            approveBtn.style.display = 'none';
+            rejectBtn.style.display = 'none';
+            return;
+        }
+
+        const alreadyDone = req.status !== 'pending';
+        approveBtn.style.display = alreadyDone ? 'none' : 'inline-flex';
+        rejectBtn.style.display = alreadyDone ? 'none' : 'inline-flex';
+
+        content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;">
+                <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+                    <div><div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;">Mã Giao Dịch (Nội dung CK)</div><div style="font-weight:800;font-size:1.4rem;color:var(--primary-lighter);letter-spacing:2px;user-select:all;">${req.name}</div></div>
+                    <div style="margin-top:10px;"><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:2px;">Gói đăng ký</div><div style="font-weight:600;color:var(--text-primary);">${req.plan || 'Chưa chọn'}</div></div>
+                </div>
+            </div>
+            <div style="background:rgba(59,79,191,0.1);border:1px solid rgba(59,79,191,0.25);border-radius:12px;padding:14px;">
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">🔑 Mã mời đăng ký (sẽ được sao chép tự động khi phê duyệt):</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <code id="approvalInviteCode" style="font-size:1.6rem;font-weight:800;color:var(--primary-lighter);letter-spacing:6px;">${inviteCode}</code>
+                    <button onclick="copyRegInviteCode('${inviteCode}')" class="btn-icon" title="Sao chép" style="padding:8px 12px;"><i class="ph ph-copy"></i></button>
+                </div>
+            </div>
+            ${alreadyDone ? `<div style="text-align:center;padding:10px;font-size:0.9rem;color:var(--text-muted);">${req.status === 'sent' ? '✅ Đã phê duyệt và gửi mã' : '❌ Đã từ chối'}</div>` : 
+            '<div style="font-size:0.8rem;color:var(--text-muted);background:rgba(255,255,255,0.03);padding:10px 14px;border-radius:8px;">💡 Sau khi bấm <strong>Phê duyệt</strong>: mã mời sẽ được sao chép vào clipboard. Paste và gửi cho khách qua <strong>Zalo / Telegram</strong>.</div>'}
+        </div>`;
+    } catch(e) {
+        content.innerHTML = `<div style="color:var(--danger);text-align:center;padding:16px;">❌ Lỗi: ${e.message}</div>`;
+    }
+};
+
+window.closeRegApprovalModal = function() {
+    document.getElementById('regApprovalOverlay').style.display = 'none';
+    _currentRegReqId = null;
+    _currentRegNotifId = null;
+};
+
+window.approveRegRequest = async function(status) {
+    if (!_currentRegReqId) return;
+    const btn = document.getElementById('approveRegBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner"></i> Đang xử lý...'; }
+    try {
+        if (status === 'sent') {
+            // Gọi endpoint approve — tự động gửi email
+            const res = await fetch(`${API_BASE}/register-request/${_currentRegReqId}/approve`, {
+                method: 'POST', headers: getHeaders()
+            });
+            const data = await res.json();
+            if (data.emailSent) {
+                showToast(`✅ Đã gửi mã mời qua email tự động! ${data.message}`);
+            } else {
+                // Email chưa cấu hình — hiển thị mã để admin sao chép thủ công
+                const code = data.inviteCode || '------';
+                await navigator.clipboard.writeText(code).catch(() => {});
+                showToast(`✅ Phê duyệt! Mã mời "${code}" đã sao chép (email chưa cấu hình).`);
+            }
+        } else {
+            await fetch(`${API_BASE}/register-request/${_currentRegReqId}`, {
+                method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ status })
+            });
+            showToast('❌ Đã từ chối yêu cầu đăng ký.');
+        }
+        if (_currentRegNotifId) await fsUpdateNotification(_currentRegNotifId, { isRead: true });
+        closeRegApprovalModal();
+        if (currentView === 'settings') loadRegRequests();
+    } catch(e) {
+        showToast('❌ Lỗi: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph ph-check-circle"></i> Phê duyệt & Sao chép mã'; }
+    }
+};
+
+// Phê duyệt nhanh từ nút trong chuông thông báo (không cần mở modal)
+window.quickApproveReg = async function(reqId, notifId, btnEl) {
+    if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="ph ph-spinner"></i> Đang gửi...'; }
+    try {
+        const res = await fetch(`${API_BASE}/register-request/${reqId}/approve`, {
+            method: 'POST', headers: getHeaders()
+        });
+        const data = await res.json();
+        if (data.emailSent) {
+            showToast(`✅ Đã gửi mã mời qua email tự động!`);
+            if (btnEl) { btnEl.innerHTML = '✅ Đã gửi email'; btnEl.style.background = 'var(--success)'; }
+        } else {
+            const code = data.inviteCode || '------';
+            await navigator.clipboard.writeText(code).catch(() => {});
+            showToast(`✅ Phê duyệt! Mã: "${code}" đã sao chép (email chưa cấu hình).`);
+            if (btnEl) { btnEl.innerHTML = `✅ Mã: ${code}`; btnEl.style.background = 'rgba(255,255,255,0.1)'; }
+        }
+        if (notifId) await fsUpdateNotification(notifId, { isRead: true });
+        if (currentView === 'settings') loadRegRequests();
+    } catch(e) {
+        showToast('❌ Lỗi: ' + e.message);
+        if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="ph ph-check-circle"></i> Phê duyệt ngay'; }
+    }
+};
+
+// ======================================
+// YÊU CẦU ĐĂNG KÝ TÀI KHOẢN (SuperAdmin)
+// ======================================
+window.loadRegRequests = async function() {
+    if (!currentUser || currentUser.role !== 'superadmin') return;
+    const container = document.getElementById('regRequestsList');
+    if (!container) return;
+    const filter = document.getElementById('regRequestFilter')?.value || '';
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;"><i class="ph ph-spinner" style="font-size:1.5rem;"></i> Đang tải...</div>';
+    try {
+        const url = filter ? `/register-request?status=${filter}` : '/register-request';
+        const list = await apiGet(url);
+        if (!list.length) {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px;"><i class="ph ph-inbox" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Không có yêu cầu nào</div>';
+            return;
+        }
+        // Lấy mã mời hiện tại để hiển thị
+        let inviteCode = '------';
+        try { const ic = await apiGet('/settings/invite-code'); inviteCode = ic.code || '------'; } catch(_) {}
+
+        container.innerHTML = list.map(req => {
+            const statusMap = { pending: { label: '⏳ Chờ xử lý', color: 'var(--warning)' }, sent: { label: '✅ Đã gửi mã', color: 'var(--success)' }, rejected: { label: '❌ Từ chối', color: 'var(--danger)' } };
+            const st = statusMap[req.status] || { label: req.status, color: 'var(--text-muted)' };
+            const dt = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
+            return `
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:2px;">Mã Giao Dịch:</div>
+                        <div style="font-weight:800;font-size:1.2rem;color:var(--primary-lighter);letter-spacing:1px;user-select:all;margin-bottom:6px;">${req.name}</div>
+                        <div style="font-size:0.82rem;color:var(--text-muted);">📦 ${req.plan || 'Chưa chọn gói'} &nbsp;|&nbsp; 🕐 ${dt}</div>
+                    </div>
+                    <span style="font-size:0.8rem;font-weight:600;color:${st.color};background:rgba(255,255,255,0.05);padding:4px 12px;border-radius:20px;white-space:nowrap;">${st.label}</span>
+                </div>
+                <div style="background:rgba(59,79,191,0.08);border:1px solid rgba(59,79,191,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                    <div style="font-size:0.82rem;color:var(--text-muted);">Mã mời hiện tại:</div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <code style="font-size:1.2rem;font-weight:800;color:var(--primary-lighter);letter-spacing:4px;">${inviteCode}</code>
+                        <button onclick="copyRegInviteCode('${inviteCode}')" class="btn-icon" title="Sao chép mã mời" style="padding:6px 10px;"><i class="ph ph-copy"></i></button>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    ${req.status === 'pending' ? `
+                    <button onclick="markRegRequest('${req.id}','sent')" class="btn-primary" style="font-size:0.82rem;padding:7px 14px;">
+                        <i class="ph ph-check-circle"></i> Đánh dấu đã gửi mã
+                    </button>
+                    <button onclick="markRegRequest('${req.id}','rejected')" class="btn-secondary" style="font-size:0.82rem;padding:7px 14px;color:var(--danger);border-color:var(--danger);">
+                        <i class="ph ph-x-circle"></i> Từ chối
+                    </button>` : ''}
+                    <button onclick="deleteRegRequest('${req.id}')" class="btn-secondary" style="font-size:0.82rem;padding:7px 14px;" title="Xóa">
+                        <i class="ph ph-trash"></i> Xóa
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = `<div style="color:var(--danger);text-align:center;padding:16px;">❌ Lỗi: ${e.message}</div>`;
+    }
+};
+
+window.copyRegInviteCode = function(code) {
+    navigator.clipboard.writeText(code).then(() => showToast('✅ Đã sao chép mã mời: ' + code));
+};
+
+window.markRegRequest = async function(id, status) {
+    try {
+        if (status === 'sent') {
+            const res = await fetch(`${API_BASE}/register-request/${id}/approve`, {
+                method: 'POST', headers: getHeaders()
+            });
+            const data = await res.json();
+            showToast(data.message || '✅ Đã phê duyệt!');
+        } else {
+            await fetch(`${API_BASE}/register-request/${id}`, {
+                method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ status })
+            });
+            showToast('✅ Đã cập nhật trạng thái');
+        }
+        loadRegRequests();
+    } catch(e) {
+        showToast('❌ Lỗi: ' + e.message);
+    }
+};
+
+window.deleteRegRequest = async function(id) {
+    if (!await showConfirm('Xóa yêu cầu đăng ký này?', 'Xác nhận xóa', '🗑️', 'Xóa')) return;
+    try {
+        await fetch(`${API_BASE}/register-request/${id}`, { method: 'DELETE', headers: getHeaders() });
+        showToast('🗑️ Đã xóa yêu cầu');
+        loadRegRequests();
+    } catch(e) { showToast('❌ Lỗi: ' + e.message); }
+};
 
 init();

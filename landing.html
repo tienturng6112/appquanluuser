@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AISHOP — Hệ Thống Quản Lý Khách Hàng AI Thông Minh</title>
+    <meta name="description" content="AISHOP - Nền tảng quản lý khách hàng AI chuyên nghiệp. Quản lý hàng trăm tài khoản, tự động hóa gia hạn, theo dõi doanh thu — tất cả trong một bảng điều khiển duy nhất.">
+    <link rel="stylesheet" href="landing.css?v=1">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+
+<body>
+    <!-- ====== NAVIGATION ====== -->
+    <nav class="landing-nav" id="landingNav">
+        <div class="nav-container">
+            <a href="#" class="nav-logo">
+                <i class="ph ph-cube-transparent"></i>
+                <div class="nav-logo-text">
+                    <span class="nav-logo-name">AISHOP</span>
+                    <span class="nav-logo-tagline">Quản lý khách hàng AI</span>
+                </div>
+            </a>
+            <ul class="nav-menu" id="navMenu">
+                <li><a href="#hero" class="nav-link active">Dashboard</a></li>
+                <li><a href="#features" class="nav-link">Giới Thiệu</a></li>
+                <li><a href="#pricing" class="nav-link">Bảng Giá</a></li>
+                <li><a href="#contact" class="nav-link">Liên Hệ</a></li>
+            </ul>
+            <div class="nav-actions">
+                <a href="#pricing" class="nav-btn-outline" id="navRegisterBtn" onclick="openPayModal(null,event)">Đăng ký ngay</a>
+                <a href="login.html" class="nav-btn-solid" id="navLoginBtn">Đăng nhập</a>
+            </div>
+            <button class="nav-hamburger" id="navHamburger" onclick="toggleMobileNav()">
+                <i class="ph ph-list"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ====== HERO SECTION ====== -->
+    <section class="hero-section" id="hero">
+        <div class="hero-bg-shapes">
+            <div class="hero-shape hero-shape-1"></div>
+            <div class="hero-shape hero-shape-2"></div>
+            <div class="hero-shape hero-shape-3"></div>
+        </div>
+        <div class="hero-container">
+            <h1 class="hero-title">
+                Quản lý Khách hàng AI<br>
+                <span class="hero-highlight">thông minh & hiệu quả</span>
+            </h1>
+            <p class="hero-subtitle">
+                Quản lý hàng trăm tài khoản dịch vụ, theo dõi gia hạn, tự động hóa quy trình — tất cả trong một bảng điều khiển duy nhất. An toàn, nhanh chóng, dễ sử dụng.
+            </p>
+            <div class="hero-cta">
+                <a href="login.html" class="hero-btn-primary" id="heroStartBtn">
+                    Bắt đầu ngay
+                </a>
+                <a href="#features" class="hero-btn-secondary">
+                    Tìm hiểu thêm
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="hero-stat">
+                    <span class="hero-stat-value" data-target="500">0</span><span class="hero-stat-plus">+</span>
+                    <span class="hero-stat-label">Khách hàng đã kết nối</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value" data-target="1200">0</span><span class="hero-stat-plus">+</span>
+                    <span class="hero-stat-label">Tài khoản quản lý / tháng</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value" data-target="10000">0</span><span class="hero-stat-plus">+</span>
+                    <span class="hero-stat-label">Giao dịch đã xử lý</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat">
+                    <span class="hero-stat-value hero-stat-percent">99.9</span><span class="hero-stat-plus">%</span>
+                    <span class="hero-stat-label">Uptime</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== FEATURES SECTION ====== -->
+    <section class="features-section" id="features">
+        <div class="section-container">
+            <h2 class="section-title">Tính năng nổi bật</h2>
+            <p class="section-subtitle">
+                Mọi thứ bạn cần để quản lý khách hàng AI chuyên nghiệp, từ quản lý tài khoản đến theo dõi kết quả.
+            </p>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(101, 130, 170, 0.1); color: #6582AA;">
+                        <i class="ph ph-users-three"></i>
+                    </div>
+                    <h3>Quản lý Khách hàng</h3>
+                    <p>Tự động quản lý và đồng bộ danh sách khách hàng của bạn chỉ trong vài giây. Tìm kiếm, lọc và xuất dữ liệu dễ dàng.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                        <i class="ph ph-squares-four"></i>
+                    </div>
+                    <h3>Quản lý Dịch vụ</h3>
+                    <p>Tạo và quản lý các loại dịch vụ AI với biểu tượng, màu sắc riêng biệt. Kiểm soát tốc độ và giới hạn thông minh.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(131, 162, 205, 0.1); color: #83A2CD;">
+                        <i class="ph ph-envelope-simple"></i>
+                    </div>
+                    <h3>Mẫu thông báo</h3>
+                    <p>Tạo và quản lý các mẫu thông báo cho khách hàng, tiết kiệm thời gian soạn thảo lặp đi lặp lại.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+                        <i class="ph ph-lightning"></i>
+                    </div>
+                    <h3>Tự động hóa</h3>
+                    <p>Thiết lập lịch theo dõi hết hạn tự động, không cần can thiệp thủ công 24/7. Hệ thống tự cảnh báo khi tài khoản sắp hết hạn.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+                        <i class="ph ph-shield-check"></i>
+                    </div>
+                    <h3>An toàn tài khoản</h3>
+                    <p>Quản lý nhiều tài khoản quản trị, giới hạn sử dụng theo gói và theo dõi trạng thái real-time.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: rgba(99, 102, 241, 0.1); color: #6366f1;">
+                        <i class="ph ph-chart-line-up"></i>
+                    </div>
+                    <h3>Theo dõi & Báo cáo</h3>
+                    <p>Xem chi tiết lịch sử gửi, trạng thái thành công/thất bại và báo cáo doanh thu cho từng tháng.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== PRICING SECTION ====== -->
+    <section class="pricing-section" id="pricing">
+        <div class="section-container">
+            <h2 class="section-title">Bảng giá dịch vụ</h2>
+            <p class="section-subtitle">
+                Chọn gói phù hợp với nhu cầu của bạn
+            </p>
+            <div class="pricing-grid pricing-grid-2">
+                <!-- Basic Plan -->
+                <div class="pricing-card">
+                    <div class="pricing-badge">Phổ biến</div>
+                    <h3 class="pricing-name">Gói cơ bản</h3>
+                    <div class="pricing-price">
+                        <span class="pricing-amount">88.000đ</span>
+                        <span class="pricing-period">/ tháng</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="ph ph-check-circle"></i> Quản lý tối đa 200 khách hàng</li>
+                        <li><i class="ph ph-check-circle"></i> Quản lý dịch vụ</li>
+                        <li><i class="ph ph-check-circle"></i> Mẫu thông báo</li>
+                        <li><i class="ph ph-check-circle"></i> Theo dõi hết hạn tự động</li>
+                        <li><i class="ph ph-check-circle"></i> Đồng bộ dữ liệu real-time</li>
+                        <li><i class="ph ph-check-circle"></i> Tự động hóa cơ bản</li>
+                        <li><i class="ph ph-check-circle"></i> Hỗ trợ kỹ thuật</li>
+                    </ul>
+                    <button class="pricing-btn" onclick="openPayModal('Gói cơ bản — 88.000đ/tháng', event)">Đăng ký ngay</button>
+                </div>
+
+                <!-- Pro Plan -->
+                <div class="pricing-card pricing-featured">
+                    <h3 class="pricing-name">Gói Pro</h3>
+                    <div class="pricing-price">
+                        <span class="pricing-amount">148.000đ</span>
+                        <span class="pricing-period">/ tháng</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="ph ph-check-circle"></i> Quản lý khách hàng không giới hạn</li>
+                        <li><i class="ph ph-check-circle"></i> Quản lý dịch vụ</li>
+                        <li><i class="ph ph-check-circle"></i> Mẫu thông báo nâng cao</li>
+                        <li><i class="ph ph-check-circle"></i> Theo dõi hết hạn tự động</li>
+                        <li><i class="ph ph-check-circle"></i> Đồng bộ dữ liệu real-time</li>
+                        <li><i class="ph ph-check-circle"></i> Tự động hóa nâng cao</li>
+                        <li><i class="ph ph-check-circle"></i> Hỗ trợ ưu tiên 24/7</li>
+                    </ul>
+                    <button class="pricing-btn" onclick="openPayModal('Gói Pro — 148.000đ/tháng', event)">Đăng ký ngay</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== CONTACT SECTION ====== -->
+    <section class="contact-section" id="contact">
+        <div class="section-container">
+            <div class="contact-card">
+                <h2 class="contact-title">Liên hệ đặt mua dịch vụ</h2>
+                <div class="contact-items">
+                    <div class="contact-item">
+                        <i class="ph ph-phone"></i>
+                        <span>Hotline/Zalo: 0886672721</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="ph ph-chat-circle-dots"></i>
+                        <span>Tele: t.me/nghi0608</span>
+                    </div>
+                </div>
+                <div class="contact-items">
+                    <div class="contact-item">
+                        <i class="ph ph-facebook-logo"></i>
+                        <span>FB: fb.com/hoxuanghi0608</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== CTA SECTION ====== -->
+    <section class="cta-section">
+        <div class="section-container">
+            <h2 class="cta-title">Sẵn sàng tối ưu quản lý của bạn?</h2>
+            <p class="cta-subtitle">Đăng ký tài khoản và bắt đầu miễn phí ngay hôm nay.</p>
+            <a href="login.html" class="cta-btn" id="ctaLoginBtn">
+                Đăng nhập AISHOP
+            </a>
+        </div>
+    </section>
+
+    <!-- ====== FOOTER ====== -->
+    <footer class="landing-footer">
+        <div class="footer-container">
+            <div class="footer-left">
+                <i class="ph ph-cube-transparent"></i>
+                <span>AISHOP — Hệ thống quản lý khách hàng AI</span>
+            </div>
+            <div class="footer-right">
+                <span>Bảo mật · Nhanh chóng · Dễ sử dụng</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ====== PAYMENT MODAL ====== -->
+    <div class="pay-overlay" id="payOverlay" onclick="closePayModal(event)">
+        <div class="pay-modal" id="payModal">
+            <button class="pay-close" onclick="closePayModal(null)" title="Đóng"><i class="ph ph-x"></i></button>
+
+            <!-- STEP 1: Form info -->
+            <div id="payStep1">
+                <div class="pay-header">
+                    <div class="pay-header-icon"><i class="ph ph-credit-card"></i></div>
+                    <h2>Đăng ký tài khoản</h2>
+                    <p id="payPlanLabel" class="pay-plan-label"></p>
+                </div>
+                <div class="pay-bank-info" id="payBankInfo">
+                    <div class="pay-bank-details" style="padding:0 5px;">
+                        <div class="pay-bank-row"><i class="ph ph-bank"></i><span id="pBankName" style="font-weight:600;">Đang tải...</span></div>
+                        <div class="pay-bank-row"><i class="ph ph-hash"></i><span id="pAccNum" style="font-weight:500; font-family:monospace; font-size:1rem;"></span></div>
+                        <div class="pay-bank-row"><i class="ph ph-user-circle"></i><span id="pAccHolder" style="font-weight:600;"></span></div>
+                        <div class="pay-bank-row pay-amount-row"><i class="ph ph-money"></i><span id="pAmount" class="pay-amount-val" style="font-size:1.2rem;"></span></div>
+                    </div>
+                    
+                    <div style="margin-top:16px; background:linear-gradient(135deg, rgba(59,79,191,0.08), rgba(59,79,191,0.15)); border:1px solid rgba(59,79,191,0.2); border-radius:12px; padding:16px; text-align:center;">
+                        <div style="font-size:0.85rem; color:var(--text-body); margin-bottom:8px; font-weight:500;">Mã giao dịch (Nội dung chuyển khoản)</div>
+                        <div id="pTransactionCode" style="font-weight:900; font-size:1.8rem; color:var(--primary); letter-spacing:3px; user-select:all; background:#fff; padding:8px 15px; border-radius:8px; display:inline-block; border:1px dashed var(--primary-light);"></div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;">* Vui lòng nhập ĐÚNG mã này vào nội dung CK</div>
+                    </div>
+                    
+                    <div class="pay-qr-area" style="margin-top:20px; text-align:center;">
+                        <img id="payQrImg" src="" alt="QR" style="display:none; max-width:240px; margin:0 auto; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.12); border:4px solid #fff;">
+                        <div id="payQrPlaceholder" style="color:#aaa; font-size:0.85rem; padding:20px 0; background:rgba(0,0,0,0.03); border-radius:12px;">QR sẽ hiển thị sau khi admin cấu hình</div>
+                    </div>
+                </div>
+                <form id="payForm">
+                    <div id="payError" class="pay-error"></div>
+                    <button type="submit" class="pay-submit-btn" id="paySubmitBtn">
+                        <i class="ph ph-paper-plane-tilt"></i> Tôi đã thanh toán với mã giao dịch trên
+                    </button>
+                </form>
+            </div>
+
+            <!-- STEP 2: Success -->
+            <div id="payStep2" style="display:none; text-align:center; padding: 20px 0;">
+                <div class="pay-success-icon"><i class="ph ph-check-circle"></i></div>
+                <h3 class="pay-success-title" id="paySuccessTitle">Đang chờ xác nhận...</h3>
+                <div class="pay-success-msg" id="paySuccessMsg">
+                    Vui lòng giữ nguyên trang này.<br>Hệ thống đang tự động xác nhận thanh toán của bạn...<br><br>
+                    <i class="ph ph-spinner" style="font-size:2rem; animation: spin 1s linear infinite; display:inline-block;"></i>
+                </div>
+                <div class="pay-success-contact">
+                    <i class="ph ph-chat-circle-dots"></i>
+                    <span>Zalo/Hotline: <strong>0886672721</strong></span>
+                </div>
+                <button class="pay-submit-btn" onclick="closePayModal(null)" style="margin-top:20px;">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== FLOATING SOCIAL BUTTONS ====== -->
+    <div class="floating-socials">
+        <a href="https://t.me/nghi0608" target="_blank" class="floating-btn floating-telegram" title="Telegram">
+            <i class="ph ph-telegram-logo"></i>
+        </a>
+        <a href="https://zalo.me/0886672721" target="_blank" class="floating-btn floating-zalo" title="Zalo">
+            <i class="ph ph-chat-circle-dots"></i>
+        </a>
+        <a href="tel:0886672721" class="floating-btn floating-phone" title="Gọi ngay">
+            <i class="ph ph-phone"></i>
+        </a>
+    </div>
+
+    <!-- ====== SCROLL TO TOP ====== -->
+    <button class="scroll-top" id="scrollTopBtn" onclick="scrollToTop()" title="Lên đầu trang">
+        <i class="ph ph-caret-up"></i>
+    </button>
+
+    <script>
+        // ====== CHECK IF LOGGED IN → REDIRECT ======
+        (function() {
+            const token = localStorage.getItem('aishop_token');
+            const user = localStorage.getItem('aishop_user');
+            if (token && user) {
+                window.location.href = 'index.html';
+            }
+        })();
+
+        // ====== NAV SCROLL EFFECT ======
+        const nav = document.getElementById('landingNav');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+            // Scroll top button
+            const scrollBtn = document.getElementById('scrollTopBtn');
+            if (window.scrollY > 600) {
+                scrollBtn.classList.add('visible');
+            } else {
+                scrollBtn.classList.remove('visible');
+            }
+        });
+
+        // ====== MOBILE NAV TOGGLE ======
+        function toggleMobileNav() {
+            const menu = document.getElementById('navMenu');
+            const hamburger = document.getElementById('navHamburger');
+            menu.classList.toggle('open');
+            hamburger.classList.toggle('active');
+        }
+
+        // Close mobile menu when clicking a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                document.getElementById('navMenu').classList.remove('open');
+                document.getElementById('navHamburger').classList.remove('active');
+            });
+        });
+
+        // ====== SMOOTH SCROLL ======
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // ====== ACTIVE NAV LINK ON SCROLL ======
+        const sections = document.querySelectorAll('section[id]');
+        window.addEventListener('scroll', () => {
+            let scrollY = window.pageYOffset;
+            sections.forEach(section => {
+                const sectionHeight = section.offsetHeight;
+                const sectionTop = section.offsetTop - 120;
+                const sectionId = section.getAttribute('id');
+                const navLink = document.querySelector(`.nav-link[href="#${sectionId}"]`);
+                if (navLink) {
+                    if (scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
+                        navLink.classList.add('active');
+                    } else {
+                        navLink.classList.remove('active');
+                    }
+                }
+            });
+        });
+
+        // ====== COUNTER ANIMATION ======
+        function animateCounters() {
+            const counters = document.querySelectorAll('.hero-stat-value[data-target]');
+            counters.forEach(counter => {
+                const target = +counter.getAttribute('data-target');
+                const duration = 2000;
+                const step = target / (duration / 16);
+                let current = 0;
+                const timer = setInterval(() => {
+                    current += step;
+                    if (current >= target) {
+                        current = target;
+                        clearInterval(timer);
+                    }
+                    counter.textContent = Math.floor(current).toLocaleString('vi-VN');
+                }, 16);
+            });
+        }
+
+        // ====== INTERSECTION OBSERVER FOR ANIMATIONS ======
+        const observerOptions = { threshold: 0.15, rootMargin: '0px 0px -50px 0px' };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    if (entry.target.classList.contains('hero-stats')) {
+                        animateCounters();
+                    }
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.feature-card, .pricing-card, .hero-stats, .contact-card, .cta-section').forEach(el => {
+            observer.observe(el);
+        });
+
+        // ====== SCROLL TO TOP ======
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ====== PAYMENT MODAL ======
+        const API_BASE = 'http://localhost:3000/api';
+        let selectedPlan = '';
+        let currentTransactionCode = '';
+        let pollingInterval = null;
+
+        async function openPayModal(plan, e) {
+            if (e) e.preventDefault();
+            selectedPlan = plan || 'Gói cơ bản — 88.000đ/tháng';
+            
+            // Random mã giao dịch 8 số
+            currentTransactionCode = 'AI' + Math.floor(10000000 + Math.random() * 90000000);
+            
+            document.getElementById('payPlanLabel').textContent = '📦 ' + selectedPlan;
+            document.getElementById('pTransactionCode').textContent = currentTransactionCode;
+            document.getElementById('payStep1').style.display = 'block';
+            document.getElementById('payStep2').style.display = 'none';
+            document.getElementById('payError').textContent = '';
+            document.getElementById('payForm').reset();
+            document.getElementById('payOverlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+            // Load payment info
+            try {
+                const r = await fetch(`${API_BASE}/settings/renewal`);
+                if (r.ok) {
+                    const d = await r.json();
+                    document.getElementById('pBankName').textContent = d.bankName || '—';
+                    document.getElementById('pAccNum').textContent = d.accountNumber || '—';
+                    document.getElementById('pAccHolder').textContent = d.accountHolder || '—';
+                    // Tự động trích xuất giá tiền từ tên gói cước được chọn
+                    let planPrice = '0';
+                    const priceMatch = selectedPlan.match(/(\d{1,3}(?:\.\d{3})*)/);
+                    if (priceMatch) {
+                        planPrice = priceMatch[1].replace(/\./g, '');
+                    }
+                    
+                    document.getElementById('pAmount').textContent = planPrice !== '0' ? Number(planPrice).toLocaleString('vi-VN') + 'đ' : '—';
+                    
+                    if (d.bankName && d.accountNumber) {
+                        const amountRaw = planPrice;
+                        const acctName = encodeURIComponent(d.accountHolder || '');
+                        const addInfo = encodeURIComponent(currentTransactionCode);
+                        const acctNum = (d.accountNumber || '').replace(/\s/g, '');
+                        
+                        const qrUrl = `https://img.vietqr.io/image/${d.bankName}-${acctNum}-compact2.png?amount=${amountRaw}&addInfo=${addInfo}&accountName=${acctName}`;
+                        
+                        document.getElementById('payQrImg').src = qrUrl;
+                        document.getElementById('payQrImg').style.display = 'block';
+                        document.getElementById('payQrPlaceholder').style.display = 'none';
+                    } else {
+                        document.getElementById('payQrImg').style.display = 'none';
+                        document.getElementById('payQrPlaceholder').style.display = 'block';
+                    }
+                    
+                    document.getElementById('payBankInfo').style.display = d.bankName ? 'block' : 'none';
+                }
+            } catch(_) {}
+        }
+
+        function closePayModal(e) {
+            if (e && e.target !== document.getElementById('payOverlay') && e.target.closest('.pay-close') === null) return;
+            document.getElementById('payOverlay').classList.remove('active');
+            document.body.style.overflow = '';
+            if (pollingInterval) clearInterval(pollingInterval);
+        }
+
+        async function pollStatus() {
+            try {
+                const r = await fetch(`${API_BASE}/register-request/status/${currentTransactionCode}`);
+                if (r.ok) {
+                    const data = await r.json();
+                    if (data.status === 'sent' && data.inviteCode) {
+                        clearInterval(pollingInterval);
+                        document.getElementById('paySuccessTitle').innerHTML = '<span style="color:var(--success)"><i class="ph ph-check-circle"></i> Thành công!</span>';
+                        document.getElementById('paySuccessMsg').innerHTML = `
+                            <p style="color:var(--text-muted); margin-bottom:10px;">Thanh toán đã được phê duyệt. Đây là mã đăng ký của bạn:</p>
+                            <div style="font-size:2.5rem; font-weight:900; letter-spacing:6px; color:var(--primary-lighter); background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; margin:15px 0;">${data.inviteCode}</div>
+                            <p style="font-size:0.85rem; color:#aaa; margin-bottom:15px;">Vui lòng copy mã này và tiến hành đăng ký tài khoản.</p>
+                            <a href="login.html" class="pay-submit-btn" style="text-decoration:none; display:block; width:100%; text-align:center;">Đến trang Đăng ký ngay</a>
+                        `;
+                    } else if (data.status === 'rejected') {
+                        clearInterval(pollingInterval);
+                        document.getElementById('paySuccessTitle').innerHTML = '<span style="color:var(--danger)"><i class="ph ph-x-circle"></i> Bị từ chối</span>';
+                        document.getElementById('paySuccessMsg').innerHTML = 'Thanh toán không hợp lệ hoặc đã bị từ chối. Vui lòng liên hệ Admin để được hỗ trợ.';
+                    }
+                }
+            } catch(e) {}
+        }
+
+        document.getElementById('payForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('paySubmitBtn');
+            const errEl = document.getElementById('payError');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner" style="animation:spin 1s linear infinite;"></i> Đang gửi...';
+            errEl.textContent = '';
+            try {
+                const res = await fetch(`${API_BASE}/register-request`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transactionCode: currentTransactionCode, plan: selectedPlan })
+                });
+                
+                if (!res.ok) throw new Error('Network response was not ok');
+
+                document.getElementById('payStep1').style.display = 'none';
+                document.getElementById('payStep2').style.display = 'block';
+                
+                // Khôi phục UI loading
+                document.getElementById('paySuccessTitle').innerHTML = 'Đang chờ xác nhận...';
+                document.getElementById('paySuccessMsg').innerHTML = `
+                    Vui lòng giữ nguyên trang này.<br>Hệ thống đang tự động xác nhận thanh toán của bạn...<br><br>
+                    <i class="ph ph-spinner" style="font-size:2rem; animation: spin 1s linear infinite; display:inline-block; color:var(--primary-lighter);"></i>
+                `;
+                
+                // Bắt đầu poll trạng thái mỗi 3 giây
+                if (pollingInterval) clearInterval(pollingInterval);
+                pollingInterval = setInterval(pollStatus, 3000);
+            } catch(_) {
+                errEl.textContent = 'Lỗi kết nối. Vui lòng thử lại hoặc liên hệ Admin.';
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-paper-plane-tilt"></i> Tôi đã thanh toán với mã giao dịch trên';
+        });
+    </script>
+</body>
+
+</html>
