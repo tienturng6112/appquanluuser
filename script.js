@@ -29,12 +29,15 @@ if (!currentUser) {
     window.location.href = 'login.html';
 } else {
     let globalCustomVoiceStr = null;
+    let globalVoiceEnabled = true;
 
     window.loadVoiceSettings = async function() {
         try {
             const res = await apiGet('/settings/voice');
             if (res.enabled !== undefined) {
-                document.getElementById('voiceToggleCheckbox').checked = res.enabled;
+                globalVoiceEnabled = res.enabled;
+                const el = document.getElementById('voiceToggleCheckbox');
+                if (el) el.checked = res.enabled;
             }
             const customRes = await apiGet('/settings/voice/custom');
             globalCustomVoiceStr = customRes.audioData;
@@ -55,9 +58,10 @@ if (!currentUser) {
         
         if (!force && sessionStorage.getItem('greeted') === 'true') return;
         
-        const isEnabled = document.getElementById('voiceToggleCheckbox').checked;
+        const isEnabled = globalVoiceEnabled;
         if (!isEnabled && !force) {
             sessionStorage.setItem('greeted', 'true');
+            console.log('🔇 Giọng nói đang bị tắt bởi hệ thống.');
             return;
         }
 
@@ -2259,35 +2263,36 @@ window.loadRegRequests = async function() {
         container.innerHTML = list.map(req => {
             const statusMap = { pending: { label: '⏳ Chờ xử lý', color: 'var(--warning)' }, sent: { label: '✅ Đã gửi mã', color: 'var(--success)' }, rejected: { label: '❌ Từ chối', color: 'var(--danger)' } };
             const st = statusMap[req.status] || { label: req.status, color: 'var(--text-muted)' };
-            const dt = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
+            const dt = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
             return `
-            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                    <div>
-                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:2px;">Mã Giao Dịch:</div>
-                        <div style="font-weight:800;font-size:1.2rem;color:var(--primary-lighter);letter-spacing:1px;user-select:all;margin-bottom:6px;">${req.name}</div>
-                        <div style="font-size:0.82rem;color:var(--text-muted);">📦 ${req.plan || 'Chưa chọn gói'} &nbsp;|&nbsp; 🕐 ${dt}</div>
+            <div class="glass-panel" style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <div style="font-weight: 800; font-size: 1.1rem; color: var(--primary-lighter); letter-spacing: 0.5px;">${req.name}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">📦 ${req.plan || 'N/A'} &nbsp;•&nbsp; 🕐 ${dt}</div>
                     </div>
-                    <span style="font-size:0.8rem;font-weight:600;color:${st.color};background:rgba(255,255,255,0.05);padding:4px 12px;border-radius:20px;white-space:nowrap;">${st.label}</span>
+                    <span style="font-size: 0.75rem; font-weight: 700; color: ${st.color}; background: rgba(255,255,255,0.03); padding: 4px 10px; border-radius: 6px;">${st.label}</span>
                 </div>
-                <div style="background:rgba(59,79,191,0.08);border:1px solid rgba(59,79,191,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                    <div style="font-size:0.82rem;color:var(--text-muted);">Mã mời hiện tại:</div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <code style="font-size:1.2rem;font-weight:800;color:var(--primary-lighter);letter-spacing:4px;">${inviteCode}</code>
-                        <button onclick="copyRegInviteCode('${inviteCode}')" class="btn-icon" title="Sao chép mã mời" style="padding:6px 10px;"><i class="ph ph-copy"></i></button>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; gap: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">Mã mời:</span>
+                        <code style="font-size: 1.1rem; font-weight: 800; color: var(--primary-lighter); letter-spacing: 2px;">${inviteCode}</code>
+                        <button onclick="copyRegInviteCode('${inviteCode}')" class="btn-icon" style="padding: 4px; font-size: 1rem;"><i class="ph ph-copy"></i></button>
                     </div>
-                </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    ${req.status === 'pending' ? `
-                    <button onclick="markRegRequest('${req.id}','sent')" class="btn-primary" style="font-size:0.82rem;padding:7px 14px;">
-                        <i class="ph ph-check-circle"></i> Đánh dấu đã gửi mã
-                    </button>
-                    <button onclick="markRegRequest('${req.id}','rejected')" class="btn-secondary" style="font-size:0.82rem;padding:7px 14px;color:var(--danger);border-color:var(--danger);">
-                        <i class="ph ph-x-circle"></i> Từ chối
-                    </button>` : ''}
-                    <button onclick="deleteRegRequest('${req.id}')" class="btn-secondary" style="font-size:0.82rem;padding:7px 14px;" title="Xóa">
-                        <i class="ph ph-trash"></i> Xóa
-                    </button>
+                    
+                    <div style="display: flex; gap: 8px;">
+                        ${req.status === 'pending' ? `
+                        <button onclick="markRegRequest('${req.id}','sent')" class="btn-primary" style="padding: 6px 12px; font-size: 0.8rem; height: 32px;">
+                            <i class="ph ph-check"></i> Gửi mã
+                        </button>
+                        <button onclick="markRegRequest('${req.id}','rejected')" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.2); height: 32px;">
+                            <i class="ph ph-x"></i>
+                        </button>` : ''}
+                        <button onclick="deleteRegRequest('${req.id}')" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; height: 32px;" title="Xóa">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
                 </div>
             </div>`;
         }).join('');
