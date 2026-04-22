@@ -1709,14 +1709,23 @@ window.openRenewModal = async function() {
         if (bankDisplay) { const el = document.getElementById('renewBankName'); if (el) el.textContent = bankDisplay; }
         if (settings.accountNumber) { const el = document.getElementById('renewAccountNumber'); if (el) el.textContent = settings.accountNumber; }
         if (settings.accountHolder) { const el = document.getElementById('renewAccountHolder'); if (el) el.textContent = settings.accountHolder; }
-        if (settings.amount) { const el = document.getElementById('renewAmountDisplay'); if (el) el.textContent = formatCurrency(settings.amount.replace(/\D/g, '')) + ' VNĐ'; }
+        
+        // Tính tiền gia hạn tự động theo Gói
+        let calculatedAmount = settings.amount || '';
+        if (currentUser && currentUser.plan) {
+            const p = currentUser.plan.toLowerCase();
+            if (p.includes('cơ bản')) calculatedAmount = '88000';
+            else if (p.includes('pro')) calculatedAmount = '148000';
+        }
+        
+        if (calculatedAmount) { const el = document.getElementById('renewAmountDisplay'); if (el) el.textContent = formatCurrency(calculatedAmount.replace(/\D/g, '')) + ' VNĐ'; }
 
         // Tạo QR động qua VietQR API (chứa mã giao dịch tự động)
         const qrImg = document.getElementById('renewQrImage');
         const qrPlaceholder = document.getElementById('renewQrPlaceholder');
         
         const acctNum = (settings.accountNumber || '').replace(/\s/g, '');
-        const amountRaw = (settings.amount || '').replace(/\D/g, '');
+        const amountRaw = (calculatedAmount || '').replace(/\D/g, '');
         const acctName = encodeURIComponent(settings.accountHolder || '');
         const addInfo = encodeURIComponent(transCode);
         
