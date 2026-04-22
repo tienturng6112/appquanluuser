@@ -29,18 +29,19 @@ if (!currentUser) {
     window.location.href = 'login.html';
 } else {
     let globalCustomVoiceStr = null;
-    let globalVoiceEnabled = true;
+    let globalVoiceEnabled = null; // null means not loaded yet
 
     window.loadVoiceSettings = async function() {
         try {
             const res = await apiGet('/settings/voice');
-            if (res.enabled !== undefined) {
+            if (res && res.enabled !== undefined) {
                 globalVoiceEnabled = res.enabled;
+                console.log('🔈 Voice Setting Loaded:', globalVoiceEnabled);
                 const el = document.getElementById('voiceToggleCheckbox');
                 if (el) el.checked = res.enabled;
             }
             const customRes = await apiGet('/settings/voice/custom');
-            globalCustomVoiceStr = customRes.audioData;
+            globalCustomVoiceStr = customRes ? customRes.audioData : null;
             
             const rmBtn = document.getElementById('removeVoiceBtn');
             if (rmBtn) {
@@ -54,14 +55,18 @@ if (!currentUser) {
 
     // THIẾT LẬP GIỌNG CHÀO MỪNG
     window.greetUser = async function(force = false) {
-        await window.loadVoiceSettings();
+        // Nếu chưa load thì phải load
+        if (globalVoiceEnabled === null) {
+            await window.loadVoiceSettings();
+        }
         
         if (!force && sessionStorage.getItem('greeted') === 'true') return;
         
-        const isEnabled = globalVoiceEnabled;
+        // Nếu load thất bại hoặc trả về false thì không kêu (trừ khi force)
+        const isEnabled = globalVoiceEnabled === true; 
         if (!isEnabled && !force) {
             sessionStorage.setItem('greeted', 'true');
-            console.log('🔇 Giọng nói đang bị tắt bởi hệ thống.');
+            console.log('🔇 Giọng nói đang bị tắt hoặc chưa tải được cấu hình.');
             return;
         }
 

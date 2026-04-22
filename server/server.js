@@ -512,7 +512,7 @@ app.post('/api/settings/invite-code', authMiddleware, requireRole('superadmin'),
 
 app.get('/api/settings/voice', authMiddleware, async (req, res) => {
     let enabled = await db.getSetting('voice_enabled');
-    if (enabled === null) enabled = 'true';
+    if (enabled === null) enabled = 'false'; // Mặc định tắt để đảm bảo ổn định
     res.json({ enabled: enabled === 'true' });
 });
 
