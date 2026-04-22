@@ -101,8 +101,8 @@ app.get('/api/events', (req, res) => {
     });
 });
 
-function broadcast(eventType) {
-    const data = JSON.stringify({ type: eventType, time: Date.now() });
+function broadcast(eventType, payload = null) {
+    const data = JSON.stringify({ type: eventType, payload, time: Date.now() });
     for (const client of sseClients) {
         client.write(`data: ${data}\n\n`);
     }
@@ -400,6 +400,9 @@ app.delete('/api/users/:id', authMiddleware, requireRole('superadmin', 'admin'),
         }
         const ok = await db.deleteUser(req.params.id);
         if (!ok) return res.status(404).json({ error: 'Không thể xóa' });
+        
+        // Kích người dùng bị xóa ra khỏi hệ thống ngay lập tức
+        broadcast('force_logout', { userId: req.params.id });
         broadcast('users_changed');
         res.json({ success: true });
     } catch (e) {

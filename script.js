@@ -260,6 +260,10 @@ function getHeaders() {
 
 async function apiGet(path) {
     const res = await fetch(`${API_BASE}${path}`, { headers: getHeaders() });
+    if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error('401');
+    }
     if (!res.ok) {
         let msg = res.status;
         try { const data = await res.json(); if (data.error) msg = data.error; } catch (e) {}
@@ -274,6 +278,10 @@ async function apiPost(path, data) {
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
+    if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error('401');
+    }
     if (!res.ok) {
         let msg = res.status;
         try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
@@ -288,6 +296,10 @@ async function apiPut(path, data) {
         headers: getHeaders(),
         body: JSON.stringify(data)
     });
+    if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error('401');
+    }
     if (!res.ok) {
         let msg = res.status;
         try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
@@ -301,12 +313,23 @@ async function apiDelete(path) {
         method: 'DELETE',
         headers: getHeaders()
     });
+    if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error('401');
+    }
     if (!res.ok) {
         let msg = res.status;
         try { const d = await res.json(); if (d.error) msg = d.error; } catch (e) {}
         throw new Error(msg);
     }
     return res.json();
+}
+
+function handleUnauthorized() {
+    localStorage.removeItem('aishop_token');
+    localStorage.removeItem('aishop_user');
+    sessionStorage.removeItem('greeted');
+    window.location.href = 'login.html';
 }
 
 // ======================================
@@ -430,6 +453,12 @@ function setupSSE() {
             }
             if (msg.type === 'reg_requests_changed') {
                 if (currentView === 'settings') loadRegRequests();
+            }
+            if (msg.type === 'force_logout') {
+                if (currentUser && msg.payload && msg.payload.userId === currentUser.id) {
+                    console.warn('Tài khoản đã bị Admin xóa. Đang đăng xuất...');
+                    handleUnauthorized();
+                }
             }
         } catch (e) { console.error('SSE message error:', e); }
     };
