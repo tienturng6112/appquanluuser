@@ -475,12 +475,34 @@
                         
                         const qrUrl = `https://img.vietqr.io/image/${d.bankName}-${acctNum}-compact2.png?amount=${amountRaw}&addInfo=${addInfo}&accountName=${acctName}`;
                         
-                        document.getElementById('payQrImg').src = qrUrl;
-                        document.getElementById('payQrImg').style.display = 'block';
-                        document.getElementById('payQrPlaceholder').style.display = 'none';
+                        // Hiển thị trạng thái đang tải QR
+                        const qrImg = document.getElementById('payQrImg');
+                        const qrPlaceholder = document.getElementById('payQrPlaceholder');
+                        
+                        if (qrPlaceholder) {
+                            qrPlaceholder.innerHTML = '<div class="spinner"></div><p style="margin-top:10px;font-size:0.8rem;color:var(--text-muted);">Đang tạo mã QR...</p>';
+                            qrPlaceholder.style.display = 'flex';
+                            qrPlaceholder.style.flexDirection = 'column';
+                            qrPlaceholder.style.alignItems = 'center';
+                            qrPlaceholder.style.justifyContent = 'center';
+                            qrPlaceholder.style.minHeight = '200px';
+                        }
+                        qrImg.style.display = 'none';
+
+                        qrImg.onload = () => {
+                            qrImg.style.display = 'block';
+                            if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+                        };
+                        qrImg.onerror = () => {
+                            if (qrPlaceholder) {
+                                qrPlaceholder.innerHTML = '<i class="ph ph-warning-circle" style="font-size:2rem;color:var(--danger)"></i><p style="margin-top:10px;color:var(--danger);">Lỗi tải mã QR</p>';
+                            }
+                        };
+                        qrImg.src = qrUrl;
                     } else {
                         document.getElementById('payQrImg').style.display = 'none';
-                        document.getElementById('payQrPlaceholder').style.display = 'block';
+                        document.getElementById('payQrPlaceholder').style.display = 'flex';
+                        document.getElementById('payQrPlaceholder').innerHTML = '<i class="ph ph-info" style="font-size:2rem;opacity:0.3"></i><p>Chưa cấu hình thanh toán</p>';
                     }
                     
                     document.getElementById('payBankInfo').style.display = d.bankName ? 'block' : 'none';

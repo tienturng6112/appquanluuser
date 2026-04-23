@@ -436,3 +436,19 @@ body {
     .pricing-grid-2 { grid-template-columns: 1fr; }
     .pay-modal { padding: 24px 18px; }
 }
+
+/* ====== ANIMATIONS ====== */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(59, 79, 191, 0.1);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+.refreshing {
+    animation: spin 0.8s linear infinite;
+}

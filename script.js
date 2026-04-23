@@ -41,7 +41,7 @@ if (!currentUser) {
                 globalVoiceEnabled = res.enabled;
                 console.log('🔈 Voice Setting Loaded:', globalVoiceEnabled);
                 if (globalVoiceEnabled === false) {
-                    window.speechSynthesis.cancel(); // Dừng ngay lập tức nếu đang nói
+                    window.stopAllAudio(); // Dừng ngay lập tức nếu đang nói
                 }
                 const el = document.getElementById('voiceToggleCheckbox');
                 if (el) el.checked = res.enabled;
@@ -61,6 +61,15 @@ if (!currentUser) {
         }
     };
 
+    window.stopAllAudio = function() {
+        window.speechSynthesis.cancel();
+        if (window._currentAudio) {
+            window._currentAudio.pause();
+            window._currentAudio.src = ""; // Clear src to stop loading
+            window._currentAudio = null;
+        }
+    };
+
     // THIẾT LẬP GIỌNG CHÀO MỪNG
     window.greetUser = async function(force = false) {
         // Nếu chưa load thì phải load
@@ -68,27 +77,30 @@ if (!currentUser) {
             await window.loadVoiceSettings();
         }
         
-        if (!force && sessionStorage.getItem('greeted') === 'true') return;
-        
         // Nếu load thất bại hoặc trả về false thì không kêu (trừ khi force)
         const isEnabled = globalVoiceEnabled === true; 
         if (!isEnabled && !force) {
             sessionStorage.setItem('greeted', 'true');
             console.log('🔇 Giọng nói đang bị tắt hoặc chưa tải được cấu hình.');
+            window.stopAllAudio();
             return;
         }
 
+        if (!force && sessionStorage.getItem('greeted') === 'true') return;
+
         if (globalCustomVoiceStr) {
-            const audio = new Audio(globalCustomVoiceStr);
-            audio.onplay = () => { sessionStorage.setItem('greeted', 'true'); };
-            audio.onerror = (e) => { console.warn("Custom Audio Error", e); };
-            audio.play().catch(e => {
+            window.stopAllAudio(); // Stop previous
+            window._currentAudio = new Audio(globalCustomVoiceStr);
+            window._currentAudio.onplay = () => { sessionStorage.setItem('greeted', 'true'); };
+            window._currentAudio.onerror = (e) => { console.warn("Custom Audio Error", e); };
+            window._currentAudio.play().catch(e => {
                 console.warn("Autoplay blocked for custom audio:", e);
             });
             return;
         }
 
         // Câu chào mặc định
+        window.stopAllAudio(); // Stop previous
         window._currentUtterance = new SpeechSynthesisUtterance(`Chào mừng quản trị viên đã trở lại`);
         window._currentUtterance.lang = 'vi-VN';
         window._currentUtterance.rate = 1.0;
@@ -106,12 +118,16 @@ if (!currentUser) {
 
     window.toggleVoiceSetting = async function() {
         const isChecked = document.getElementById('voiceToggleCheckbox').checked;
+        globalVoiceEnabled = isChecked; // Update local state immediately
+        if (!isChecked) window.stopAllAudio();
+        
         try {
             await apiPost('/settings/voice', { enabled: isChecked });
             showToast('✅ Đã đồng bộ âm thanh tới TOÀN HỆ THỐNG');
         } catch (e) {
             showToast('❌ Lỗi: ' + e.message);
             document.getElementById('voiceToggleCheckbox').checked = !isChecked; // Restore
+            globalVoiceEnabled = !isChecked;
         }
     };
 
@@ -446,7 +462,7 @@ function setupSSE() {
                     globalVoiceEnabled = msg.payload.enabled;
                     const el = document.getElementById('voiceToggleCheckbox');
                     if (el) el.checked = globalVoiceEnabled;
-                    if (globalVoiceEnabled === false) window.speechSynthesis.cancel();
+                    if (globalVoiceEnabled === false) window.stopAllAudio();
                 } else {
                     if (window.loadVoiceSettings) window.loadVoiceSettings();
                 }
@@ -1819,9 +1835,24 @@ window.openRenewModal = async function() {
             // VietQR API: https://img.vietqr.io/image/{bankCode}-{accountNo}-{template}.png
             const qrUrl = `https://img.vietqr.io/image/${bankCode}-${acctNum}-compact2.png?amount=${amountRaw}&addInfo=${addInfo}&accountName=${acctName}`;
             if (qrImg) {
+                // Show placeholder as spinner
+                if (qrPlaceholder) {
+                    qrPlaceholder.innerHTML = '<i class="ph ph-spinner refreshing"></i> Đang tạo QR...';
+                    qrPlaceholder.style.display = 'flex';
+                }
+                qrImg.style.display = 'none';
+
+                qrImg.onload = () => {
+                    qrImg.style.display = 'block';
+                    if (qrPlaceholder) qrPlaceholder.style.display = 'none';
+                };
+                qrImg.onerror = () => {
+                    if (qrPlaceholder) {
+                        qrPlaceholder.innerHTML = '<i class="ph ph-warning-circle" style="color:var(--danger)"></i> Lỗi tải mã QR';
+                        qrPlaceholder.style.display = 'flex';
+                    }
+                };
                 qrImg.src = qrUrl;
-                qrImg.style.display = 'block';
-                if (qrPlaceholder) qrPlaceholder.style.display = 'none';
             }
         } else {
             // Chưa cấu hình đầy đủ
