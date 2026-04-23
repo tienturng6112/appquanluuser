@@ -111,6 +111,8 @@ async function createTables() {
             endDate TEXT DEFAULT '',
             isEmailSent INTEGER DEFAULT 0,
             isNotifGenerated INTEGER DEFAULT 0,
+            isExpiringNotified INTEGER DEFAULT 0,
+            isExpiredNotified INTEGER DEFAULT 0,
             ownerId TEXT DEFAULT '',
             price TEXT DEFAULT '0'
         )`,
@@ -201,7 +203,9 @@ async function migrateDatabase() {
         "ALTER TABLE users ADD COLUMN accountExpiry TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT ''",
         "ALTER TABLE renewal_requests ADD COLUMN transactionRef TEXT DEFAULT ''",
-        "ALTER TABLE registration_requests ADD COLUMN inviteCode TEXT DEFAULT ''"
+        "ALTER TABLE registration_requests ADD COLUMN inviteCode TEXT DEFAULT ''",
+        "ALTER TABLE customers ADD COLUMN isExpiringNotified INTEGER DEFAULT 0",
+        "ALTER TABLE customers ADD COLUMN isExpiredNotified INTEGER DEFAULT 0"
     ];
     for (const sql of migrations) {
         try { await execute(sql); console.log('✅ Migration:', sql); }
@@ -827,7 +831,7 @@ async function getDatabaseInfo() {
 // ======================================
 module.exports = {
     initDatabase, execute, queryOne, queryAll,
-    getAllCustomers, getCustomer, addCustomer, updateCustomer, deleteCustomer,
+    getAllCustomers, getCustomer, getCustomerByEmail, addCustomer, updateCustomer, deleteCustomer,
     getAllAdmins, addAdmin, updateAdmin, deleteAdmin,
     getAllServices, getService, addService, updateService, deleteService,
     getAllNotifications, addNotification, updateNotification, deleteReadNotifications,

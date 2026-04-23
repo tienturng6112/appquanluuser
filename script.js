@@ -805,17 +805,24 @@ function showConfirm(message, title = 'Xác nhận', icon = '⚠️', btnText = 
 
         const cancelBtn = document.getElementById('confirmCancelBtn');
 
+        function onOk() { cleanup(); resolve(true); }
+        function onCancel() { cleanup(); resolve(false); }
+
+        function onKey(e) {
+            if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+
         function cleanup() {
             modal.classList.remove('active');
             okBtn.removeEventListener('click', onOk);
             cancelBtn.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
         }
-
-        function onOk() { cleanup(); resolve(true); }
-        function onCancel() { cleanup(); resolve(false); }
-
-        okBtn.addEventListener('click', onOk);
-        cancelBtn.addEventListener('click', onCancel);
     });
 }
 
@@ -825,6 +832,28 @@ function showConfirm(message, title = 'Xác nhận', icon = '⚠️', btnText = 
 function processAutomatedEmails() {
     cachedCustomers.forEach(async c => {
         const dl = calculateDaysLeft(c.endDate);
+        
+        // Cảnh báo hết hạn (5 ngày)
+        if (dl <= 5 && dl > 0 && !c.isExpiringNotified) {
+             await fsAddNotification({
+                title: `⚠️ Sắp hết hạn: ${c.name}`,
+                body: `Tên: ${c.name}\nEmail: ${c.email || '-'}\nDịch vụ: ${c.service}\nTrạng thái: Sẽ hết hạn trong ${dl} ngày.`,
+                custId: c.id
+            });
+            await fsUpdateCustomer(c.id, { isExpiringNotified: true });
+        }
+
+        // Đã hết hạn
+        if (dl <= 0 && !c.isExpiredNotified) {
+            await fsAddNotification({
+                title: `❌ Đã hết hạn: ${c.name}`,
+                body: `Tên: ${c.name}\nEmail: ${c.email || '-'}\nDịch vụ: ${c.service}\nTrạng thái: Đã hết hạn vào ngày ${c.endDate}.`,
+                custId: c.id
+            });
+            await fsUpdateCustomer(c.id, { isExpiredNotified: true });
+        }
+
+        // Gửi email qua EmailJS (nếu có cấu hình)
         if (dl <= 5 && !c.isEmailSent) {
             const admin = cachedPersonnel.find(a => a.id == c.adminId);
             if (admin && admin.email && EMAILJS_PUBLIC_KEY !== "YOUR_PUBLIC_KEY_HERE" && EMAILJS_PUBLIC_KEY !== "admin") {
@@ -1987,6 +2016,42 @@ async function loadRenewalSettingsForm() {
     } catch (e) {
         console.warn('Không thể tải cấu hình thanh toán:', e);
     }
+    loadNotificationSettings();
+}
+
+async function loadNotificationSettings() {
+    try {
+        const settings = await apiGet('/settings/notifications');
+        const tgBotToken = document.getElementById('tgBotToken');
+        const tgChatId = document.getElementById('tgChatId');
+        const tgEnabled = document.getElementById('tgEnabledToggle');
+        const emailEnabled = document.getElementById('emailNotifEnabledToggle');
+        const targetEmail = document.getElementById('notifTargetEmail');
+
+        if (tgBotToken) tgBotToken.value = settings.tgBotToken || '';
+        if (tgChatId) tgChatId.value = settings.tgChatId || '';
+        if (tgEnabled) tgEnabled.checked = !!settings.tgEnabled;
+        if (emailEnabled) emailEnabled.checked = !!settings.emailEnabled;
+        if (targetEmail && currentUser) targetEmail.textContent = currentUser.email;
+    } catch (e) {
+        console.warn('Không thể tải cấu hình thông báo:', e);
+    }
+}
+
+window.saveNotificationSettings = async function() {
+    const data = {
+        tgBotToken: document.getElementById('tgBotToken')?.value || '',
+        tgChatId: document.getElementById('tgChatId')?.value || '',
+        tgEnabled: document.getElementById('tgEnabledToggle')?.checked,
+        emailEnabled: document.getElementById('emailNotifEnabledToggle')?.checked
+    };
+
+    try {
+        await apiPost('/settings/notifications', data);
+        showToast('✅ Đã lưu cấu hình thông báo Telegram & Gmail!');
+    } catch (e) {
+        showToast('❌ Lỗi: ' + e.message);
+    }
 }
 
 window.saveRenewalSettings = async function() {
@@ -2350,5 +2415,67 @@ window.deleteRegRequest = async function(id) {
         loadRegRequests();
     } catch(e) { showToast('❌ Lỗi: ' + e.message); }
 };
+
+// ======================================
+// GLOBAL KEYBOARD SHORTCUTS
+// ======================================
+document.addEventListener('keydown', (e) => {
+    // 1. Enter Key for Confirmation / Submission
+    if (e.key === 'Enter') {
+        // Skip if focus is on a button or textarea
+        if (document.activeElement.tagName === 'BUTTON' || document.activeElement.tagName === 'TEXTAREA') return;
+
+        // Find the top-most active modal
+        const activeModals = document.querySelectorAll('.modal-overlay.active, .pay-overlay.active');
+        if (activeModals.length > 0) {
+            const currentModal = activeModals[activeModals.length - 1];
+            
+            // Skip confirmModal as it has its own listener in showConfirm()
+            if (currentModal.id === 'confirmModal') return;
+
+            // Find primary action button
+            const primaryBtn = currentModal.querySelector('.btn-primary, .pay-submit-btn');
+            const form = currentModal.querySelector('form');
+
+            // If we are in a form and an input/select is focused, let the browser handle it
+            if (form && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+            if (primaryBtn && !primaryBtn.disabled) {
+                e.preventDefault();
+                primaryBtn.click();
+            }
+        }
+    } 
+    // 2. Escape Key for Closing Modals
+    else if (e.key === 'Escape') {
+        const activeModals = document.querySelectorAll('.modal-overlay.active, .pay-overlay.active, .notif-dropdown.show');
+        if (activeModals.length > 0) {
+            const currentModal = activeModals[activeModals.length - 1];
+            
+            // confirmModal handles its own escape
+            if (currentModal.id === 'confirmModal') return;
+
+            if (currentModal.id === 'notifDropdown') {
+                currentModal.classList.remove('show');
+                return;
+            }
+
+            // Find close icon or cancel button
+            const cancelBtn = currentModal.querySelector('.btn-secondary, .ph-x, .close-btn, .pay-close, [onclick*="close"]');
+            if (cancelBtn) {
+                e.preventDefault();
+                cancelBtn.click();
+            } else {
+                // Fallback: search by common cancel buttons if not found by selector
+                const closeIcon = currentModal.querySelector('.ph-x');
+                if (closeIcon) { closeIcon.click(); return; }
+                
+                // Final fallback: just hide the modal
+                currentModal.classList.remove('active');
+                if (currentModal.id === 'renewModal') window.closeRenewModal();
+            }
+        }
+    }
+});
 
 init();

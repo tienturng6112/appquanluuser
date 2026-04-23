@@ -392,6 +392,61 @@
                         </div>
                     </div>
 
+                    <!-- Cấu Hình Thông Báo Ngoài (Telegram & Email) -->
+                    <div class="settings-row vertical no-border">
+                        <div class="settings-info" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                            <h3 class="settings-title" style="color: #0088cc;"><i class="ph ph-telegram-logo"></i> Thông Báo Telegram & Gmail</h3>
+                            <p class="settings-desc">Tự động gửi thông báo hết hạn và yêu cầu mới về Telegram hoặc Email của bạn.</p>
+                        </div>
+                        
+                        <div class="settings-grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <!-- Telegram Settings -->
+                            <div class="glass-panel" style="padding: 20px; background: rgba(0, 136, 204, 0.05); border: 1px solid rgba(0, 136, 204, 0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <h4 style="margin: 0; color: #0088cc;"><i class="ph ph-telegram-logo"></i> Telegram Bot</h4>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" id="tgEnabledToggle">
+                                        <span>Bật</span>
+                                    </label>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 12px;">
+                                    <label style="font-size: 0.8rem; opacity: 0.7;">Bot Token</label>
+                                    <input type="password" id="tgBotToken" placeholder="712345678:AAHxxxxx..." style="font-size: 0.85rem;">
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-size: 0.8rem; opacity: 0.7;">Chat ID (Cá nhân hoặc Nhóm)</label>
+                                    <input type="text" id="tgChatId" placeholder="123456789" style="font-size: 0.85rem;">
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 10px;">
+                                    * Tạo bot qua <a href="https://t.me/BotFather" target="_blank" style="color: #0088cc;">@BotFather</a> và lấy ID qua <a href="https://t.me/userinfobot" target="_blank" style="color: #0088cc;">@userinfobot</a>
+                                </p>
+                            </div>
+
+                            <!-- Email Settings -->
+                            <div class="glass-panel" style="padding: 20px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <h4 style="margin: 0; color: #f87171;"><i class="ph ph-envelope"></i> Thông báo Gmail</h4>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" id="emailNotifEnabledToggle">
+                                        <span>Bật</span>
+                                    </label>
+                                </div>
+                                <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
+                                    Khi bật, hệ thống sẽ gửi bản sao thông báo về email đăng ký của bạn: <strong style="color: var(--text-primary);" id="notifTargetEmail">---</strong>
+                                </p>
+                                <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px; font-size: 0.75rem; color: var(--text-muted);">
+                                    <i class="ph ph-info"></i> Yêu cầu Admin đã cấu hình <code>MAIL_USER</code> và <code>MAIL_PASS</code> trong hệ thống.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-action-row" style="margin-top: 10px;">
+                            <button class="btn-primary" type="button" onclick="saveNotificationSettings()" style="background: linear-gradient(135deg, #0088cc, #006699);">
+                                <i class="ph ph-bell-ringing"></i> Lưu Cấu Hình Thông Báo
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Phần Mã Mời -->
                     <div id="inviteCodeSection" class="settings-row no-border" style="display: flex !important;">
                         <div class="settings-info">

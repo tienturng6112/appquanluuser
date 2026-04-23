@@ -1,4 +1,4 @@
-// ======================================
+﻿// ======================================
 // EXPRESS SERVER — AISHOP DASHBOARD
 // Hỗ trợ: Turso Cloud + SQL.js Local
 // ======================================
@@ -61,6 +61,147 @@ async function sendInviteCodeEmail({ toEmail, toName, inviteCode, plan }) {
     return true;
 }
 
+// ====== NOTIFICATION HELPERS (Telegram & Gmail) ======
+async function sendTelegramNotification(ownerId, message) {
+    try {
+        const botToken = await db.getSetting(`tg_bot_token_${ownerId}`);
+        const chatId = await db.getSetting(`tg_chat_id_${ownerId}`);
+        const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
+
+        if (!botToken || !chatId || enabled !== 'true') return;
+
+        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+        });
+        console.log(`📡 Telegram notification sent to owner ${ownerId}`);
+    } catch (e) {
+        console.error('❌ Lỗi gửi Telegram:', e.message);
+    }
+}
+
+async function sendEmailNotification(ownerId, title, body) {
+    try {
+        const enabled = await db.getSetting(`email_notif_enabled_${ownerId}`);
+        if (enabled !== 'true') return;
+
+        const owner = await db.getUserById(ownerId);
+        if (!owner || !owner.email) return;
+
+        const transporter = createMailTransporter();
+        if (!transporter) return;
+
+        const fromName = process.env.MAIL_FROM_NAME || 'AISHOP Notifier';
+        await transporter.sendMail({
+            from: `"${fromName}" <${process.env.MAIL_USER}>`,
+            to: owner.email,
+            subject: `🔔 [AISHOP] ${title}`,
+            text: body,
+            html: `<div style="font-family:sans-serif;padding:20px;background:#f4f7f6;border-radius:10px;">
+                <h2 style="color:#3B4FBF;">${title}</h2>
+                <p style="color:#333;font-size:1.1rem;">${body}</p>
+                <hr style="border:0;border-top:1px solid #ddd;margin:20px 0;">
+                <p style="color:#999;font-size:0.8rem;">Thông báo tự động từ hệ thống AISHOP.</p>
+            </div>`
+        });
+        console.log(`📧 Email notification sent to owner ${ownerId} (${owner.email})`);
+    } catch (e) {
+        console.error('❌ Lỗi gửi Email:', e.message);
+    }
+}
+
+// ====== TELEGRAM INTERACTIVE POLLING ======
+let tgPollOffsets = {}; // track offset per bot token
+
+async function startTelegramPolling() {
+    console.log('🤖 Telegram Interactive Polling started...');
+    setInterval(async () => {
+        try {
+            // Lấy tất cả bot tokens đang active (chỉ superadmin cho đơn giản)
+            const allUsers = await db.getAllUsers();
+            const superAdmins = allUsers.filter(u => u.role === 'superadmin');
+            
+            for (const admin of superAdmins) {
+                const token = await db.getSetting(`tg_bot_token_${admin.id}`);
+                const enabled = await db.getSetting(`tg_enabled_${admin.id}`);
+                if (!token || enabled !== 'true') continue;
+
+                await pollBot(token, admin.id);
+            }
+        } catch (e) { /* ignore */ }
+    }, 5000);
+}
+
+async function pollBot(token, adminId) {
+    const offset = tgPollOffsets[token] || 0;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=0`);
+        const data = await res.json();
+        if (data.ok && data.result.length > 0) {
+            for (const update of data.result) {
+                tgPollOffsets[token] = update.update_id + 1;
+                if (update.callback_query) {
+                    await handleTelegramCallback(token, adminId, update.callback_query);
+                }
+            }
+        }
+    } catch (e) { console.error('TG Poll Error:', e.message); }
+}
+
+async function handleTelegramCallback(token, adminId, query) {
+    const { data, id: queryId, message } = query;
+    const chatId = message.chat.id;
+    const msgId = message.message_id;
+
+    const answer = async (text) => {
+        await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callback_query_id: queryId, text })
+        });
+    };
+
+    const updateMsg = async (newText) => {
+        await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, message_id: msgId, text: newText, parse_mode: 'HTML' })
+        });
+    };
+
+    try {
+        if (data.startsWith('approve_reg:')) {
+            const reqId = data.split(':')[1];
+            // Mocking req.user for approval logic
+            const admin = await db.getUserById(adminId);
+            
+            // Logic phê duyệt
+            const req_data = await db.getRegRequests();
+            const regReq = req_data.find(r => r.id === reqId);
+            if (!regReq) return await answer('❌ Yêu cầu không còn tồn tại');
+            if (regReq.status !== 'pending') return await answer('⚠️ Yêu cầu đã được xử lý trước đó');
+
+            const inviteCode = 'AI-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+            await db.updateRegRequestInviteCode(reqId, inviteCode);
+            broadcast('reg_requests_changed');
+            
+            await answer('✅ Đã phê duyệt thành công!');
+            await updateMsg(`${message.text}\n\n✅ <b>TRẠNG THÁI: ĐÃ PHÊ DUYỆT</b>\n🔑 Mã mời: <code>${inviteCode}</code>`);
+        } 
+        else if (data.startsWith('reject_reg:')) {
+            const reqId = data.split(':')[1];
+            await db.updateRegRequestStatus(reqId, 'rejected');
+            broadcast('reg_requests_changed');
+            await answer('❌ Đã từ chối yêu cầu');
+            await updateMsg(`${message.text}\n\n❌ <b>TRẠNG THÁI: ĐÃ TỪ CHỐI</b>`);
+        }
+    } catch (e) {
+        await answer('❌ Lỗi hệ thống: ' + e.message);
+    }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -105,6 +246,79 @@ function broadcast(eventType, payload = null) {
     const data = JSON.stringify({ type: eventType, payload, time: Date.now() });
     for (const client of sseClients) {
         client.write(`data: ${data}\n\n`);
+    }
+}
+
+// Central function to create notification + send external alerts
+async function createNotification({ ownerId, title, body, custId = '', type = '' }) {
+    try {
+        const id = await db.addNotification({ ownerId, title, body, custId, time: new Date().toISOString() });
+        broadcast('notifications_changed');
+
+        // External alerts (Telegram with Interactive Buttons)
+        const botToken = (await db.getSetting(`tg_bot_token_${ownerId}`))?.toString().trim();
+        const chatId = (await db.getSetting(`tg_chat_id_${ownerId}`))?.toString().trim();
+        const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
+
+        if (botToken && chatId && (enabled === 'true' || enabled === true)) {
+            const dateStr = new Date().toLocaleString('vi-VN', { 
+                day: '2-digit', month: '2-digit', year: 'numeric', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit' 
+            });
+
+            const tgMsg = `<b>🚀 AISHOP SYSTEM ALERT</b>\n` +
+                          `──────────────────\n` +
+                          `<b>📌 Tiêu đề:</b> ${title}\n` +
+                          `<b>📝 Nội dung:</b> ${body}\n` +
+                          `──────────────────\n` +
+                          `<b>🕒 Thời gian:</b> <code>${dateStr}</code>`;
+            
+            let reply_markup = null;
+            // Nếu là yêu cầu đăng ký
+            if (custId && title.includes('đăng ký')) {
+                reply_markup = {
+                    inline_keyboard: [[
+                        { text: '✅ Phê duyệt', callback_data: `approve_reg:${custId}` },
+                        { text: '❌ Từ chối', callback_data: `reject_reg:${custId}` }
+                    ]]
+                };
+            } 
+            // Nếu là yêu cầu gia hạn
+            else if (title.includes('gia hạn')) {
+                // Chúng ta cần ID của renewal request. 
+                // Ở đây createNotification được gọi sau khi createRenewalRequest, id ở trên chính là notification id.
+                // Tuy nhiên logic verifyRenewal cần ID của renewal_request. 
+                // Giải pháp: tìm renewal_request mới nhất của user hoặc truyền ID vào.
+                // Tạm thời chỉ hỗ trợ đăng ký vì nó có custId link sẵn.
+            }
+
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            const payload = { 
+                chat_id: chatId, 
+                text: tgMsg, 
+                parse_mode: 'HTML'
+            };
+            if (reply_markup) {
+                payload.reply_markup = reply_markup;
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const tgData = await response.json();
+            if (response.ok) {
+                console.log(`📡 Telegram notification sent successfully to owner ${ownerId}`);
+            } else {
+                console.error(`❌ Telegram API Error:`, tgData);
+            }
+        }
+
+        sendEmailNotification(ownerId, title, body);
+        return id;
+    } catch (e) {
+        console.error('❌ Lỗi tạo thông báo:', e.message);
     }
 }
 
@@ -155,14 +369,12 @@ app.post('/api/register-request', async (req, res) => {
         const allUsers = await db.getAllUsers();
         const superAdmin = allUsers.find(u => u.role === 'superadmin');
         if (superAdmin) {
-            await db.addNotification({
+            await createNotification({
                 ownerId: superAdmin.id,
-                custId: reqId,   // dùng custId để link modal phê duyệt
+                custId: reqId,
                 title: '🆕 Yêu cầu đăng ký tài khoản mới',
-                body: `Mã GD: ${transactionCode}\n📦 ${plan || 'Chưa chọn gói'}\n→ Bấm "Phê duyệt" để cấp mã.`,
-                time: new Date().toISOString()
+                body: `Mã GD: ${transactionCode}\n📦 ${plan || 'Chưa chọn gói'}\n→ Bấm "Phê duyệt" để cấp mã.`
             });
-            broadcast('notifications_changed');
         }
         broadcast('reg_requests_changed');
         res.json({ success: true, transactionCode });
@@ -449,6 +661,14 @@ app.post('/api/customers', authMiddleware, async (req, res) => {
         // Tự động gán ownerId = người đang đăng nhập
         req.body.ownerId = req.user.id;
         const id = await db.addCustomer(req.body);
+        
+        // Gửi thông báo
+        await createNotification({
+            ownerId: req.user.id,
+            title: '👤 Thêm khách hàng mới',
+            body: `Tên: ${req.body.name}\nEmail: ${req.body.email || '-'}\nDịch vụ: ${req.body.service || '-'}`
+        });
+
         broadcast('customers_changed');
         res.status(201).json({ id });
     } catch (e) {
@@ -568,6 +788,37 @@ app.post('/api/settings/renewal', authMiddleware, requireRole('superadmin'), asy
     }
 });
 
+// Telegram & Email Settings Management
+app.get('/api/settings/notifications', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        res.json({
+            tgBotToken: await db.getSetting(`tg_bot_token_${userId}`) || '',
+            tgChatId: await db.getSetting(`tg_chat_id_${userId}`) || '',
+            tgEnabled: (await db.getSetting(`tg_enabled_${userId}`)) === 'true',
+            emailEnabled: (await db.getSetting(`email_notif_enabled_${userId}`)) === 'true'
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings/notifications', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { tgBotToken, tgChatId, tgEnabled, emailEnabled } = req.body;
+        
+        if (tgBotToken !== undefined) await db.setSetting(`tg_bot_token_${userId}`, tgBotToken);
+        if (tgChatId !== undefined) await db.setSetting(`tg_chat_id_${userId}`, tgChatId);
+        if (tgEnabled !== undefined) await db.setSetting(`tg_enabled_${userId}`, tgEnabled ? 'true' : 'false');
+        if (emailEnabled !== undefined) await db.setSetting(`email_notif_enabled_${userId}`, emailEnabled ? 'true' : 'false');
+        
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ======================================
 // API: PHÊ DUYỆT GIA HẠN
 // ======================================
@@ -588,15 +839,12 @@ app.post('/api/renewal/request', authMiddleware, async (req, res) => {
         const superAdmins = await db.getAllUsers();
         const mainAdmin = superAdmins.find(u => u.role === 'superadmin');
         if (mainAdmin) {
-            await db.addNotification({
+            await createNotification({
                 ownerId: mainAdmin.id,
                 title: '📌 Yêu cầu gia hạn mới',
-                body: `Quản trị viên ${req.user.fullName} vừa gửi yêu cầu gia hạn tài khoản.`,
-                time: new Date().toISOString()
+                body: `Quản trị viên ${req.user.fullName} vừa gửi yêu cầu gia hạn tài khoản.`
             });
         }
-        
-        broadcast('notifications_changed');
         res.status(201).json({ id });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -637,15 +885,12 @@ app.post('/api/renewal/verify', authMiddleware, requireRole('superadmin'), async
         
         // Thông báo lại cho QTV (reqData chứa đầy đủ thông tin)
         if (reqData) {
-            await db.addNotification({
+            await createNotification({
                 ownerId: reqData.userId,
                 title: status === 'approved' ? '✅ Gia hạn thành công' : '❌ Gia hạn bị từ chối',
-                body: status === 'approved' ? 'Yêu cầu gia hạn của bạn đã được Admin phê duyệt.' : 'Yêu cầu gia hạn của bạn đã bị từ chối. Vui lòng liên hệ Admin.',
-                time: new Date().toISOString()
+                body: status === 'approved' ? 'Yêu cầu gia hạn của bạn đã được Admin phê duyệt.' : 'Yêu cầu gia hạn của bạn đã bị từ chối. Vui lòng liên hệ Admin.'
             });
         }
-        
-        broadcast('notifications_changed');
         broadcast('users_changed'); // Để cập nhật lại ngày hết hạn trên UI
         res.json({ success: true });
     } catch (e) {
@@ -681,6 +926,14 @@ app.post('/api/services', authMiddleware, async (req, res) => {
     try {
         req.body.ownerId = req.user.id;
         const id = await db.addService(req.body);
+
+        // Gửi thông báo
+        await createNotification({
+            ownerId: req.user.id,
+            title: '🛠️ Thêm dịch vụ mới',
+            body: `Dịch vụ: ${req.body.name}\nGiá: ${req.body.price} VNĐ`
+        });
+
         broadcast('services_changed');
         res.status(201).json({ id });
     } catch (e) {
@@ -734,9 +987,12 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
 
 app.post('/api/notifications', authMiddleware, async (req, res) => {
     try {
-        const payload = { ...req.body, ownerId: req.user.id };
-        const id = await db.addNotification(payload);
-        broadcast('notifications_changed');
+        const id = await createNotification({
+            ownerId: req.user.id,
+            title: req.body.title,
+            body: req.body.body,
+            custId: req.body.custId
+        });
         res.status(201).json({ id });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -774,6 +1030,9 @@ async function startServer() {
         // Khởi tạo database (auto-detect Turso hoặc Local)
         await db.initDatabase();
         console.log('✅ Database đã sẵn sàng!');
+
+        // Start Telegram Polling
+        startTelegramPolling();
 
         // Start Express
         app.listen(PORT, () => {
