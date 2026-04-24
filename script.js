@@ -1,10 +1,29 @@
 // ======================================
 // CẤU HÌNH API (Node.js Backend)
 // ======================================
-let API_BASE = window.location.origin + '/api';
-if (window.location.protocol === 'file:' || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '3000') {
-    API_BASE = 'http://localhost:3000/api';
+// ======================================
+// CONFIG & CONSTANTS
+// ======================================
+// Robust API_BASE detection — handles subfolders and different protocols
+function getBaseUrl() {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    
+    // If running from local file or live server on wrong port, point to default local API
+    if (window.location.protocol === 'file:' || 
+        ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '3000')) {
+        return 'http://localhost:3000/api';
+    }
+    
+    // Detect base path (e.g., if hosted at domain.com/shop/, base is /shop)
+    const base = pathname.substring(0, pathname.lastIndexOf('/'));
+    return origin + base + '/api';
 }
+
+let API_BASE = getBaseUrl();
+console.log("🚀 AISHOP API_BASE:", API_BASE);
+console.log("📍 Window Origin:", window.location.origin);
+console.log("📁 Window Pathname:", window.location.pathname);
 
 // ======================================
 // CẤU HÌNH EMAILJS
@@ -674,7 +693,23 @@ function renderTable(searchTerm = '') {
     if (currentFilterService) filtered = filtered.filter(c => c.service === currentFilterService);
     if (currentView === 'expiring') filtered = filtered.filter(c => calculateDaysLeft(c.endDate) <= 5);
 
-    if (!filtered.length) { customerTable.style.display = 'none'; emptyState.style.display = 'flex'; return; }
+    // Empty State Handling
+    if (!filtered.length) {
+        customerTable.style.display = 'none';
+        emptyState.style.display = 'flex';
+        
+        const emptyIcon = emptyState.querySelector('i');
+        const emptyText = emptyState.querySelector('p');
+        
+        if (cachedCustomers.length === 0) {
+            emptyIcon.className = 'ph ph-folder-simple-dashed';
+            emptyText.innerHTML = `Chưa có khách hàng nào trong hệ thống.<br><small style="opacity:0.6">Hãy thêm khách hàng đầu tiên hoặc nhập từ Excel.</small>`;
+        } else {
+            emptyIcon.className = 'ph ph-magnifying-glass';
+            emptyText.textContent = `Không tìm thấy khách hàng phù hợp với "${searchTerm}"`;
+        }
+        return;
+    }
     customerTable.style.display = 'table'; emptyState.style.display = 'none';
 
     filtered.forEach(c => {

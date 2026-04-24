@@ -188,6 +188,9 @@
                     <div id="emptyState" class="empty-state" style="display: none;">
                         <i class="ph ph-folder-open"></i>
                         <p>Không có dữ liệu phù hợp</p>
+                        <button class="btn-secondary" onclick="reloadCustomers().then(()=>renderTable())" style="margin-top: 10px; font-size: 0.85rem;">
+                            <i class="ph ph-arrows-clockwise"></i> Thử Tải Lại Dữ Liệu
+                        </button>
                     </div>
                 </div>
             </div>

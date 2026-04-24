@@ -427,10 +427,17 @@
         }
 
         // ====== PAYMENT MODAL ======
-        let API_BASE = window.location.origin + '/api';
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            API_BASE = 'http://localhost:3000/api';
+        function getBaseUrl() {
+            const origin = window.location.origin;
+            const pathname = window.location.pathname;
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'http://localhost:3000/api';
+            }
+            const base = pathname.substring(0, pathname.lastIndexOf('/'));
+            return origin + base + '/api';
         }
+        let API_BASE = getBaseUrl();
+        console.log("🚀 AISHOP LANDING API_BASE:", API_BASE);
         let selectedPlan = '';
         let currentTransactionCode = '';
         let pollingInterval = null;

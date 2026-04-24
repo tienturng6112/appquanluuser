@@ -1,10 +1,22 @@
 // ======================================
 // AUTH SCRIPT — Login / Register
 // ======================================
-let API_BASE = window.location.origin + '/api';
-if (window.location.protocol === 'file:' || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '3000') {
-    API_BASE = 'http://localhost:3000/api';
+// Robust API_BASE detection — handles subfolders and different protocols
+function getBaseUrl() {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    
+    if (window.location.protocol === 'file:' || 
+        ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '3000')) {
+        return 'http://localhost:3000/api';
+    }
+    
+    const base = pathname.substring(0, pathname.lastIndexOf('/'));
+    return origin + base + '/api';
 }
+
+let API_BASE = getBaseUrl();
+console.log("🚀 AISHOP AUTH API_BASE:", API_BASE);
 
 let currentLoginAs = 'admin'; // 'admin' hoặc 'user'
 
