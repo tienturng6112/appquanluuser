@@ -559,6 +559,29 @@ async function reloadCustomers() {
     cachedCustomers = await apiGet(`/customers${params}`);
 }
 
+window.handleRetryLoading = async function(btn) {
+    if (!btn || btn.classList.contains('loading')) return;
+    
+    btn.classList.add('loading');
+    const span = btn.querySelector('span');
+    const originalText = span ? span.textContent : 'Thử Tải Lại Dữ Liệu';
+    if (span) span.textContent = 'Đang tải dữ liệu...';
+
+    try {
+        await reloadCustomers();
+        renderTable(searchInput.value);
+        updateStatCards();
+        showToast('✅ Dữ liệu đã được cập nhật mới nhất');
+    } catch (e) {
+        showToast('❌ Lỗi tải lại dữ liệu: ' + e.message);
+    } finally {
+        setTimeout(() => {
+            btn.classList.remove('loading');
+            if (span) span.textContent = originalText;
+        }, 800);
+    }
+};
+
 async function reloadServices() {
     const params = viewingOwnerId ? `?ownerId=${viewingOwnerId}` : '';
     cachedServices = await apiGet(`/services${params}`);
@@ -1331,10 +1354,18 @@ function applyRolePermissions() {
         });
     }
 
-    if (currentUser.role === 'superadmin') {
-        const navSettings = document.getElementById('navSettings');
-        if (navSettings) navSettings.style.display = 'block';
+    // Hiển thị Tab Cài đặt cho SuperAdmin và Admin
+    const navSettings = document.getElementById('navSettings');
+    if (navSettings) {
+        if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
+            navSettings.style.display = 'block';
+        } else {
+            navSettings.style.display = 'none';
+        }
+    }
 
+    // Phân quyền chi tiết bên trong Tab Cài đặt
+    if (currentUser.role === 'superadmin') {
         // Hiển thị Mã Mời (ID mới)
         const inviteDiv = document.getElementById('inviteCodeSection');
         if (inviteDiv) inviteDiv.setAttribute('style', 'display: flex !important');
@@ -1343,32 +1374,63 @@ function applyRolePermissions() {
         // Hiển thị Cấu hình Thanh toán
         const renewalDiv = document.getElementById('renewalPaymentSettings');
         if (renewalDiv) renewalDiv.setAttribute('style', 'display: flex !important');
-        loadRenewalSettingsForm();
+        
+        // Hiển thị Phê Duyệt & Lịch Sử
+        const approvalSection = document.getElementById('approvalSection');
+        if (approvalSection) approvalSection.style.display = 'block';
+        const approvalHistorySection = document.getElementById('approvalHistorySection');
+        if (approvalHistorySection) approvalHistorySection.style.display = 'block';
 
         // Hiển thị Yêu Cầu Đăng Ký
         const regReqDiv = document.getElementById('regRequestsSection');
         if (regReqDiv) regReqDiv.setAttribute('style', 'display: flex !important; flex-direction: column;');
         loadRegRequests();
-    } else {
-        // Quản trị viên (admin) hoặc Nhân viên (staff): ẩn hoàn toàn
-        const navSettings = document.getElementById('navSettings');
-        if (navSettings) navSettings.style.display = 'none';
         
+        // Luôn hiển thị Cài đặt Thông báo
+        const notifSection = document.getElementById('notificationSettingsSection');
+        if (notifSection) notifSection.style.display = 'flex';
+
+        // Hiển thị Cài đặt Giọng nói
+        const voice1 = document.getElementById('voiceSettingsRow1');
+        const voice2 = document.getElementById('voiceSettingsRow2');
+        if (voice1) voice1.style.display = 'flex';
+        if (voice2) voice2.style.display = 'flex';
+        
+        loadRenewalSettingsForm();
+    } else if (currentUser.role === 'admin') {
+        // Ẩn các phần chỉ dành cho SuperAdmin
         const inviteDiv = document.getElementById('inviteCodeSection');
         if (inviteDiv) inviteDiv.style.display = 'none';
+        const renewalDiv = document.getElementById('renewalPaymentSettings');
+        if (renewalDiv) renewalDiv.style.display = 'none';
+        const approvalSection = document.getElementById('approvalSection');
+        if (approvalSection) approvalSection.style.display = 'none';
+        const approvalHistorySection = document.getElementById('approvalHistorySection');
+        if (approvalHistorySection) approvalHistorySection.style.display = 'none';
+        const regReqDiv = document.getElementById('regRequestsSection');
+        if (regReqDiv) regReqDiv.style.display = 'none';
 
-        if (currentUser.role === 'admin') {
-            // Ẩn các phần nhân sự/số liệu admin cấp trên cho tài khoản quản trị viên
-            const adminBtn = document.getElementById('addAdminBtn');
-            if (adminBtn) adminBtn.style.display = 'none';
-            const statAdmins = document.getElementById('statAdmins');
-            if (statAdmins) {
-                const card = statAdmins.closest('.stat-card');
-                if (card) card.style.display = 'none';
-            }
-            // const thAdmin = document.getElementById('thAdminColumn');
-            // if (thAdmin) thAdmin.style.display = 'none';
+        // Ẩn Cài đặt Giọng nói (Chỉ SuperAdmin mới được chỉnh)
+        const voice1 = document.getElementById('voiceSettingsRow1');
+        const voice2 = document.getElementById('voiceSettingsRow2');
+        if (voice1) voice1.style.display = 'none';
+        if (voice2) voice2.style.display = 'none';
+
+        // Hiển thị Cài đặt Thông báo
+        const notifSection = document.getElementById('notificationSettingsSection');
+        if (notifSection) notifSection.style.display = 'flex';
+        
+        // Ẩn các nút/thống kê admin cấp trên
+        const adminBtn = document.getElementById('addAdminBtn');
+        if (adminBtn) adminBtn.style.display = 'none';
+        const statAdmins = document.getElementById('statAdmins');
+        if (statAdmins) {
+            const card = statAdmins.closest('.stat-card');
+            if (card) card.style.display = 'none';
         }
+        
+        // Tải cấu hình thông báo cho admin
+        loadNotificationSettings();
     }
 }
 

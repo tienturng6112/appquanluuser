@@ -679,13 +679,87 @@ select option {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 0;
+    padding: 80px 20px;
     color: var(--text-muted);
-    gap: 16px;
+    gap: 20px;
+    text-align: center;
+    animation: fadeIn 0.5s ease forwards;
 }
 .empty-state i {
-    font-size: 4rem;
-    opacity: 0.5;
+    font-size: 5rem;
+    opacity: 0.35;
+    background: linear-gradient(135deg, var(--primary-lighter), transparent);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: float 3s ease-in-out infinite;
+}
+.empty-state p {
+    font-size: 1.1rem;
+    max-width: 400px;
+    line-height: 1.6;
+}
+.empty-state small {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.85rem;
+    opacity: 0.6;
+}
+
+.btn-retry-loading {
+    margin-top: 15px;
+    background: rgba(163, 197, 241, 0.05);
+    border: 1px solid rgba(163, 197, 241, 0.15);
+    color: var(--primary-lighter);
+    padding: 14px 28px;
+    border-radius: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 200px;
+}
+
+.btn-retry-loading i {
+    font-size: 2.2rem;
+    -webkit-text-fill-color: initial;
+    background: none;
+    opacity: 1;
+    margin: 0;
+    animation: none; /* Reset float animation for the button icon */
+}
+
+.btn-retry-loading:hover {
+    background: rgba(163, 197, 241, 0.1);
+    border-color: var(--primary-lighter);
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.btn-retry-loading:active {
+    transform: scale(0.98);
+}
+
+.btn-retry-loading.loading i {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* Toast */

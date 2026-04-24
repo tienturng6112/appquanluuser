@@ -188,8 +188,9 @@
                     <div id="emptyState" class="empty-state" style="display: none;">
                         <i class="ph ph-folder-open"></i>
                         <p>Không có dữ liệu phù hợp</p>
-                        <button class="btn-secondary" onclick="reloadCustomers().then(()=>renderTable())" style="margin-top: 10px; font-size: 0.85rem;">
-                            <i class="ph ph-arrows-clockwise"></i> Thử Tải Lại Dữ Liệu
+                        <button onclick="handleRetryLoading(this)" class="btn-retry-loading">
+                            <i class="ph ph-arrows-clockwise"></i>
+                            <span>Thử Tải Lại Dữ Liệu</span>
                         </button>
                     </div>
                 </div>
@@ -306,7 +307,7 @@
                     </div>
 
                     <!-- Setup Giọng Nói Mặc định -->
-                    <div class="settings-row">
+                    <div id="voiceSettingsRow1" class="settings-row">
                         <div class="settings-info">
                             <h3 class="settings-title default-voice"><i class="ph ph-speaker-high"></i> Bật/Tắt Giọng Nói Chào Mừng</h3>
                             <p class="settings-desc">Đồng bộ việc phát âm thanh chào mừng khi bất kì quản trị viên hay nhân viên nào đăng nhập thành công vào hệ thống.</p>
@@ -320,7 +321,7 @@
                     </div>
 
                     <!-- Setup Giọng Nói Riêng -->
-                    <div class="settings-row">
+                    <div id="voiceSettingsRow2" class="settings-row">
                         <div class="settings-info">
                             <h3 class="settings-title custom-voice"><i class="ph ph-waveform"></i> Tải Lên Giọng Nói Riêng (MP3/WAV)</h3>
                             <p class="settings-desc">Thay thế máy đọc tự động (AI) bằng file thu âm thực tế của bạn. Tính năng áp dụng đồng bộ cho tất cả tài khoản. (Tối đa 5MB)</p>
@@ -396,7 +397,7 @@
                     </div>
 
                     <!-- Cấu Hình Thông Báo Ngoài (Telegram & Email) -->
-                    <div class="settings-row vertical no-border">
+                    <div id="notificationSettingsSection" class="settings-row vertical no-border">
                         <div class="settings-info" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
                             <h3 class="settings-title" style="color: #0088cc;"><i class="ph ph-telegram-logo"></i> Thông Báo Telegram & Gmail</h3>
                             <p class="settings-desc">Tự động gửi thông báo hết hạn và yêu cầu mới về Telegram hoặc Email của bạn.</p>
@@ -420,9 +421,14 @@
                                     <label style="font-size: 0.8rem; opacity: 0.7;">Chat ID (Cá nhân hoặc Nhóm)</label>
                                     <input type="text" id="tgChatId" placeholder="123456789" style="font-size: 0.85rem;">
                                 </div>
-                                <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 10px;">
-                                    * Tạo bot qua <a href="https://t.me/BotFather" target="_blank" style="color: #0088cc;">@BotFather</a> và lấy ID qua <a href="https://t.me/userinfobot" target="_blank" style="color: #0088cc;">@userinfobot</a>
-                                </p>
+                                <div style="margin-top: 15px; padding: 12px; background: rgba(0, 136, 204, 0.08); border-radius: 8px; border: 1px dashed rgba(0, 136, 204, 0.3);">
+                                    <div style="font-size: 0.75rem; color: #0088cc; font-weight: 700; margin-bottom: 8px;"><i class="ph ph-info"></i> Hướng dẫn cấu hình nhanh:</div>
+                                    <ul style="font-size: 0.7rem; color: var(--text-muted); padding-left: 15px; margin: 0; line-height: 1.6;">
+                                        <li><b>Bước 1:</b> Nhắn <code>/newbot</code> cho <a href="https://t.me/BotFather" target="_blank" style="color: #0088cc; text-decoration: underline;">@BotFather</a> để lấy <b>Bot Token</b>.</li>
+                                        <li><b>Bước 2:</b> Nhắn tin bất kỳ cho <a href="https://t.me/userinfobot" target="_blank" style="color: #0088cc; text-decoration: underline;">@userinfobot</a> để lấy <b>Chat ID</b> của bạn.</li>
+                                        <li><b>Bước 3:</b> Nhấn <b>"Bắt đầu" (Start)</b> trên Bot của bạn, sau đó nhấn <b>Lưu</b> ở phía dưới.</li>
+                                    </ul>
+                                </div>
                             </div>
 
                             <!-- Email Settings -->
