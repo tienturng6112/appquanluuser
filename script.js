@@ -489,6 +489,9 @@ function setupSSE() {
             if (msg.type === 'invite_code_changed') {
                 if (typeof fetchInviteCode === 'function') fetchInviteCode();
             }
+            if (msg.type === 'announcement_changed') {
+                if (typeof loadAnnouncement === 'function') loadAnnouncement();
+            }
             if (msg.type === 'customers_changed') {
                 await reloadCustomers();
                 if (currentView !== 'admins' && currentView !== 'services') renderTable(searchInput.value);
@@ -1346,6 +1349,22 @@ function applyRolePermissions() {
         };
     }
     
+    // Cập nhật câu chào cá nhân và hiển thị nút sửa thông báo cho SuperAdmin
+    const greetingText = document.getElementById('greetingText');
+    const greetingSubtext = document.getElementById('greetingSubtext');
+    if (greetingText && currentUser) {
+        greetingText.textContent = `Chào mừng ${currentUser.fullName || currentUser.email} trở lại! 👋`;
+        if (currentUser.role === 'superadmin') {
+            if (greetingSubtext) greetingSubtext.textContent = 'Hôm nay bạn muốn cập nhật thông báo hay quản lý hệ thống?';
+            const editBtn = document.getElementById('editAnnouncementBtn');
+            if (editBtn) editBtn.style.display = 'inline-flex';
+        } else {
+            if (greetingSubtext) greetingSubtext.textContent = 'Chúc bạn một ngày làm việc hiệu quả và thành công!';
+            const editBtn = document.getElementById('editAnnouncementBtn');
+            if (editBtn) editBtn.style.display = 'none';
+        }
+    }
+    
     // Ẩn Sidebar Quản lý Nhân sự đối với tất cả trừ superadmin
     if (currentUser.role !== 'superadmin') {
         const navItems = document.querySelectorAll('.nav-links > li');
@@ -1623,6 +1642,7 @@ async function init() {
         updateExpiringBadge();
         renderNotifications();
         updateStatCards();
+        loadAnnouncement();
         
         // Cập nhật lại tên nếu DB đã đổi nhưng local chưa đổi
         if (currentUser && currentUser.id) {
@@ -2542,6 +2562,54 @@ window.deleteRegRequest = async function(id) {
         showToast('🗑️ Đã xóa yêu cầu');
         loadRegRequests();
     } catch(e) { showToast('❌ Lỗi: ' + e.message); }
+};
+
+// ======================================
+// SYSTEM ANNOUNCEMENT (Bảng Tin Hệ Thống)
+// ======================================
+window.loadAnnouncement = async function() {
+    const contentEl = document.getElementById('announcementContent');
+    const timeEl = document.getElementById('announcementTime');
+    const metaEl = document.getElementById('announcementMeta');
+    if (!contentEl) return;
+    
+    try {
+        const res = await apiGet('/settings/announcement');
+        if (res && res.content) {
+            contentEl.textContent = res.content;
+            if (res.updatedAt) {
+                if (timeEl) timeEl.textContent = res.updatedAt;
+                if (metaEl) metaEl.style.display = 'block';
+            }
+        }
+    } catch (e) {
+        console.error('Lỗi tải thông báo:', e);
+        contentEl.textContent = 'Không thể tải thông báo từ máy chủ.';
+    }
+};
+
+window.openEditAnnouncementModal = function() {
+    const current = document.getElementById('announcementContent').textContent;
+    document.getElementById('announcementInput').value = current;
+    document.getElementById('announcementModal').classList.add('active');
+};
+
+window.closeAnnouncementModal = function() {
+    document.getElementById('announcementModal').classList.remove('active');
+};
+
+window.saveAnnouncement = async function() {
+    const content = document.getElementById('announcementInput').value.trim();
+    if (!content) return showToast('⚠️ Vui lòng nhập nội dung thông báo');
+    
+    try {
+        await apiPost('/settings/announcement', { content });
+        showToast('✅ Đã cập nhật bảng tin hệ thống!');
+        closeAnnouncementModal();
+        loadAnnouncement();
+    } catch (e) {
+        showToast('❌ Lỗi cập nhật: ' + e.message);
+    }
 };
 
 // ======================================

@@ -1,4 +1,4 @@
-﻿// ======================================
+// ======================================
 // EXPRESS SERVER — AISHOP DASHBOARD
 // Hỗ trợ: Turso Cloud + SQL.js Local
 // ======================================
@@ -751,6 +751,30 @@ app.post('/api/settings/voice/custom', authMiddleware, requireRole('superadmin',
     await db.setSetting('voice_custom_audio', req.body.audioData || ''); // empty string effectively removes it
     broadcast('voice_settings_changed');
     res.json({ success: true });
+});
+
+// API: System Announcement
+app.get('/api/settings/announcement', async (req, res) => {
+    try {
+        res.json({
+            content: await db.getSetting('system_announcement') || 'Chào mừng bạn đến với hệ thống quản lý AISHOP!',
+            updatedAt: await db.getSetting('system_announcement_time') || ''
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings/announcement', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const { content } = req.body;
+        await db.setSetting('system_announcement', content || '');
+        await db.setSetting('system_announcement_time', new Date().toLocaleString('vi-VN'));
+        broadcast('announcement_changed');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // API: Database Info (chỉ superadmin)
