@@ -266,16 +266,18 @@ app.get('/api/webhook/facebook', async (req, res) => {
 
 app.post('/api/webhook/facebook', async (req, res) => {
     const body = req.body;
-
+    console.log('--- FB Webhook Event Received ---');
     if (body.object === 'page') {
         body.entry.forEach(entry => {
-            const webhook_event = entry.messaging[0];
-            if (webhook_event.message && webhook_event.message.text) {
-                handleFacebookMessage(
-                    webhook_event.sender.id, 
-                    entry.id, 
-                    webhook_event.message.text
-                );
+            if (entry.messaging && entry.messaging[0]) {
+                const webhook_event = entry.messaging[0];
+                if (webhook_event.message && webhook_event.message.text) {
+                    handleFacebookMessage(
+                        webhook_event.sender.id, 
+                        entry.id, 
+                        webhook_event.message.text
+                    ).catch(err => console.error('Handle FB Message Error:', err));
+                }
             }
         });
         res.status(200).send('EVENT_RECEIVED');
