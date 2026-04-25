@@ -202,12 +202,56 @@ async function handleTelegramCallback(token, adminId, query) {
     }
 }
 
+// Central function to create notification + send external alerts
+async function createNotification({ ownerId, title, body, custId = '', type = '' }) {
+    try {
+        const id = await db.addNotification({ ownerId, title, body, custId, time: new Date().toISOString() });
+        broadcast('notifications_changed');
+
+        // External alerts (Telegram)
+        const botToken = (await db.getSetting(`tg_bot_token_${ownerId}`))?.toString().trim();
+        const chatId = (await db.getSetting(`tg_chat_id_${ownerId}`))?.toString().trim();
+        const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
+
+        if (botToken && chatId && (enabled === 'true' || enabled === true)) {
+            const dateStr = new Date().toLocaleString('vi-VN');
+            const tgMsg = `<b>🚀 AISHOP SYSTEM ALERT</b>\n` +
+                          `──────────────────\n` +
+                          `<b>📌 Tiêu đề:</b> ${title}\n` +
+                          `<b>📝 Nội dung:</b> ${body}\n` +
+                          `──────────────────\n` +
+                          `<b>🕒 Thời gian:</b> <code>${dateStr}</code>`;
+            
+            let reply_markup = null;
+            if (custId && title.includes('đăng ký')) {
+                reply_markup = {
+                    inline_keyboard: [[
+                        { text: '✅ Phê duyệt', callback_data: `approve_reg:${custId}` },
+                        { text: '❌ Từ chối', callback_data: `reject_reg:${custId}` }
+                    ]]
+                };
+            } 
+
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: tgMsg, parse_mode: 'HTML', reply_markup })
+            }).catch(e => console.error('TG API Error:', e.message));
+        }
+
+        sendEmailNotification(ownerId, title, body);
+        return id;
+    } catch (e) {
+        console.error('❌ Lỗi tạo thông báo:', e.message);
+    }
+}
+
 // ====== FACEBOOK MESSENGER WEBHOOK ======
 async function handleFacebookMessage(senderId, pageId, messageText) {
     try {
         console.log(`💬 FB Message from ${senderId}: ${messageText}`);
         
-        // Lấy thông tin admin để gửi thông báo (mặc định gửi cho superadmin hoặc admin sở hữu page)
         const allUsers = await db.getAllUsers();
         const superAdmin = allUsers.find(u => u.role === 'superadmin');
         if (!superAdmin) return;
@@ -215,7 +259,6 @@ async function handleFacebookMessage(senderId, pageId, messageText) {
         const ownerId = superAdmin.id;
         const dateStr = new Date().toLocaleString('vi-VN');
         
-        // Gửi thông báo qua Telegram
         const botToken = (await db.getSetting(`tg_bot_token_${ownerId}`))?.toString().trim();
         const chatId = (await db.getSetting(`tg_chat_id_${ownerId}`))?.toString().trim();
         const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
@@ -233,10 +276,9 @@ async function handleFacebookMessage(senderId, pageId, messageText) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ chat_id: chatId, text: tgMsg, parse_mode: 'HTML' })
-            });
+            }).catch(e => console.error('FB-TG Error:', e.message));
         }
 
-        // Tạo thông báo trong hệ thống Dashboard
         await createNotification({
             ownerId: ownerId,
             title: '💬 Tin nhắn Facebook mới',
@@ -249,40 +291,47 @@ async function handleFacebookMessage(senderId, pageId, messageText) {
 }
 
 app.get('/api/webhook/facebook', async (req, res) => {
-    const verifyToken = await db.getSetting('fb_verify_token') || 'aishop_verify_token';
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+    try {
+        const verifyToken = await db.getSetting('fb_verify_token') || 'aishop_verify_token';
+        const mode = req.query['hub.mode'];
+        const token = req.query['hub.verify_token'];
+        const challenge = req.query['hub.challenge'];
 
-    if (mode && token) {
         if (mode === 'subscribe' && token === verifyToken) {
             console.log('✅ Facebook Webhook Verified!');
             res.status(200).send(challenge);
         } else {
             res.sendStatus(403);
         }
+    } catch (e) {
+        res.status(500).send(e.message);
     }
 });
 
 app.post('/api/webhook/facebook', async (req, res) => {
-    const body = req.body;
-    console.log('--- FB Webhook Event Received ---');
-    if (body.object === 'page') {
-        body.entry.forEach(entry => {
-            if (entry.messaging && entry.messaging[0]) {
-                const webhook_event = entry.messaging[0];
-                if (webhook_event.message && webhook_event.message.text) {
-                    handleFacebookMessage(
-                        webhook_event.sender.id, 
-                        entry.id, 
-                        webhook_event.message.text
-                    ).catch(err => console.error('Handle FB Message Error:', err));
+    try {
+        const body = req.body;
+        console.log('--- FB Webhook Event Received ---');
+        if (body.object === 'page') {
+            body.entry.forEach(entry => {
+                if (entry.messaging && entry.messaging[0]) {
+                    const webhook_event = entry.messaging[0];
+                    if (webhook_event.message && webhook_event.message.text) {
+                        handleFacebookMessage(
+                            webhook_event.sender.id, 
+                            entry.id, 
+                            webhook_event.message.text
+                        ).catch(err => console.error('Handle FB Message Error:', err));
+                    }
                 }
-            }
-        });
-        res.status(200).send('EVENT_RECEIVED');
-    } else {
-        res.sendStatus(404);
+            });
+            res.status(200).send('EVENT_RECEIVED');
+        } else {
+            res.sendStatus(404);
+        }
+    } catch (e) {
+        console.error('FB Webhook Error:', e.message);
+        res.status(500).send('Internal Server Error');
     }
 });
 
@@ -333,78 +382,7 @@ function broadcast(eventType, payload = null) {
     }
 }
 
-// Central function to create notification + send external alerts
-async function createNotification({ ownerId, title, body, custId = '', type = '' }) {
-    try {
-        const id = await db.addNotification({ ownerId, title, body, custId, time: new Date().toISOString() });
-        broadcast('notifications_changed');
 
-        // External alerts (Telegram with Interactive Buttons)
-        const botToken = (await db.getSetting(`tg_bot_token_${ownerId}`))?.toString().trim();
-        const chatId = (await db.getSetting(`tg_chat_id_${ownerId}`))?.toString().trim();
-        const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
-
-        if (botToken && chatId && (enabled === 'true' || enabled === true)) {
-            const dateStr = new Date().toLocaleString('vi-VN', { 
-                day: '2-digit', month: '2-digit', year: 'numeric', 
-                hour: '2-digit', minute: '2-digit', second: '2-digit' 
-            });
-
-            const tgMsg = `<b>🚀 AISHOP SYSTEM ALERT</b>\n` +
-                          `──────────────────\n` +
-                          `<b>📌 Tiêu đề:</b> ${title}\n` +
-                          `<b>📝 Nội dung:</b> ${body}\n` +
-                          `──────────────────\n` +
-                          `<b>🕒 Thời gian:</b> <code>${dateStr}</code>`;
-            
-            let reply_markup = null;
-            // Nếu là yêu cầu đăng ký
-            if (custId && title.includes('đăng ký')) {
-                reply_markup = {
-                    inline_keyboard: [[
-                        { text: '✅ Phê duyệt', callback_data: `approve_reg:${custId}` },
-                        { text: '❌ Từ chối', callback_data: `reject_reg:${custId}` }
-                    ]]
-                };
-            } 
-            // Nếu là yêu cầu gia hạn
-            else if (title.includes('gia hạn')) {
-                // Chúng ta cần ID của renewal request. 
-                // Ở đây createNotification được gọi sau khi createRenewalRequest, id ở trên chính là notification id.
-                // Tuy nhiên logic verifyRenewal cần ID của renewal_request. 
-                // Giải pháp: tìm renewal_request mới nhất của user hoặc truyền ID vào.
-                // Tạm thời chỉ hỗ trợ đăng ký vì nó có custId link sẵn.
-            }
-
-            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-            const payload = { 
-                chat_id: chatId, 
-                text: tgMsg, 
-                parse_mode: 'HTML'
-            };
-            if (reply_markup) {
-                payload.reply_markup = reply_markup;
-            }
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const tgData = await response.json();
-            if (response.ok) {
-                console.log(`📡 Telegram notification sent successfully to owner ${ownerId}`);
-            } else {
-                console.error(`❌ Telegram API Error:`, tgData);
-            }
-        }
-
-        sendEmailNotification(ownerId, title, body);
-        return id;
-    } catch (e) {
-        console.error('❌ Lỗi tạo thông báo:', e.message);
-    }
-}
 
 // ======================================
 // AUTH MIDDLEWARE (async — hỗ trợ Turso)
