@@ -2165,6 +2165,44 @@ async function loadRenewalSettingsForm() {
         console.warn('Không thể tải cấu hình thanh toán:', e);
     }
     loadNotificationSettings();
+    loadFacebookSettings();
+}
+
+async function loadFacebookSettings() {
+    if (!currentUser || currentUser.role !== 'superadmin') return;
+    try {
+        const settings = await apiGet('/settings/facebook');
+        const verifyTokenEl = document.getElementById('fbVerifyToken');
+        const accessTokenEl = document.getElementById('fbAccessToken');
+        const webhookUrlEl = document.getElementById('fbWebhookUrl');
+
+        if (verifyTokenEl) verifyTokenEl.value = settings.verifyToken || '';
+        if (accessTokenEl) accessTokenEl.value = settings.accessToken || '';
+        if (webhookUrlEl) {
+            // Webhook URL = base domain + /api/webhook/facebook
+            webhookUrlEl.value = `${API_BASE}/webhook/facebook`;
+        }
+
+        // Show section if superadmin
+        const fbSection = document.getElementById('facebookSettingsSection');
+        if (fbSection) fbSection.style.display = 'flex';
+    } catch (e) {
+        console.warn('Không thể tải cấu hình Facebook:', e);
+    }
+}
+
+window.saveFacebookSettings = async function() {
+    const data = {
+        verifyToken: document.getElementById('fbVerifyToken')?.value || '',
+        accessToken: document.getElementById('fbAccessToken')?.value || ''
+    };
+
+    try {
+        await apiPost('/settings/facebook', data);
+        showToast('✅ Đã lưu cấu hình Facebook Messenger Webhook!');
+    } catch (e) {
+        showToast('❌ Lỗi: ' + e.message);
+    }
 }
 
 async function loadNotificationSettings() {

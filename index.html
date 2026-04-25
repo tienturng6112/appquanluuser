@@ -487,6 +487,48 @@
                         </div>
                     </div>
 
+                    <!-- Cấu Hình Facebook Messenger Webhook -->
+                    <div id="facebookSettingsSection" class="settings-row vertical no-border" style="display: none;">
+                        <div class="settings-info" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+                            <h3 class="settings-title" style="color: #1877f2;"><i class="ph ph-facebook-logo"></i> Facebook Messenger Webhook</h3>
+                            <p class="settings-desc">Kết nối tin nhắn từ Fanpage về Telegram. Khi có khách nhắn tin qua Page, hệ thống sẽ gửi thông báo về Telegram của bạn.</p>
+                        </div>
+                        
+                        <div class="settings-grid" style="grid-template-columns: 1fr; gap: 15px;">
+                            <div class="form-group">
+                                <label style="font-size: 0.85rem;"><i class="ph ph-link"></i> Webhook URL (Copy dán vào FB App)</label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input type="text" id="fbWebhookUrl" readonly style="font-size: 0.85rem; background: rgba(0,0,0,0.2); flex: 1;">
+                                    <button class="btn-secondary" onclick="copyText(document.getElementById('fbWebhookUrl').value)" style="padding: 0 15px;"><i class="ph ph-copy"></i></button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size: 0.85rem;"><i class="ph ph-shield-check"></i> Verify Token (Tự đặt hoặc dùng mặc định)</label>
+                                <input type="text" id="fbVerifyToken" placeholder="aishop_verify_token" style="font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size: 0.85rem;"><i class="ph ph-key"></i> Page Access Token (Nếu muốn phản hồi tự động - tùy chọn)</label>
+                                <input type="password" id="fbAccessToken" placeholder="EAAB..." style="font-size: 0.85rem;">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px; padding: 15px; background: rgba(24, 119, 242, 0.08); border-radius: 12px; border: 1px dashed rgba(24, 119, 242, 0.3);">
+                            <div style="font-size: 0.8rem; color: #1877f2; font-weight: 700; margin-bottom: 8px;"><i class="ph ph-info"></i> Các bước cài đặt trên Facebook Developer:</div>
+                            <ul style="font-size: 0.75rem; color: var(--text-muted); padding-left: 20px; margin: 0; line-height: 1.6;">
+                                <li><b>B1:</b> Truy cập <a href="https://developers.facebook.com/" target="_blank" style="color: #1877f2;">FB Developers</a> -> Tạo App -> Thêm sản phẩm <b>Messenger</b>.</li>
+                                <li><b>B2:</b> Trong mục <b>Webhooks</b> -> Nhấn "Edit" -> Dán <b>URL</b> và <b>Verify Token</b> ở trên vào.</li>
+                                <li><b>B3:</b> Nhấn "Manage" tại mục Page Events -> Tích chọn <code>messages</code> và <code>messaging_postbacks</code>.</li>
+                                <li><b>B4:</b> Kết nối Page của bạn vào App để bắt đầu nhận tin nhắn.</li>
+                            </ul>
+                        </div>
+
+                        <div class="settings-action-row" style="margin-top: 15px;">
+                            <button class="btn-primary" type="button" onclick="saveFacebookSettings()" style="background: linear-gradient(135deg, #1877f2, #1059b8);">
+                                <i class="ph ph-floppy-disk"></i> Lưu Cấu Hình Facebook
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Phần Mã Mời -->
                     <div id="inviteCodeSection" class="settings-row no-border" style="display: flex !important;">
                         <div class="settings-info">

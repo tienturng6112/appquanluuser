@@ -202,6 +202,88 @@ async function handleTelegramCallback(token, adminId, query) {
     }
 }
 
+// ====== FACEBOOK MESSENGER WEBHOOK ======
+async function handleFacebookMessage(senderId, pageId, messageText) {
+    try {
+        console.log(`💬 FB Message from ${senderId}: ${messageText}`);
+        
+        // Lấy thông tin admin để gửi thông báo (mặc định gửi cho superadmin hoặc admin sở hữu page)
+        const allUsers = await db.getAllUsers();
+        const superAdmin = allUsers.find(u => u.role === 'superadmin');
+        if (!superAdmin) return;
+
+        const ownerId = superAdmin.id;
+        const dateStr = new Date().toLocaleString('vi-VN');
+        
+        // Gửi thông báo qua Telegram
+        const botToken = (await db.getSetting(`tg_bot_token_${ownerId}`))?.toString().trim();
+        const chatId = (await db.getSetting(`tg_chat_id_${ownerId}`))?.toString().trim();
+        const enabled = await db.getSetting(`tg_enabled_${ownerId}`);
+
+        if (botToken && chatId && (enabled === 'true' || enabled === true)) {
+            const tgMsg = `<b>💬 TIN NHẮN MỚI TỪ FANPAGE</b>\n` +
+                          `──────────────────\n` +
+                          `<b>👤 Người gửi (ID):</b> <code>${senderId}</code>\n` +
+                          `<b>📝 Nội dung:</b> ${messageText}\n` +
+                          `──────────────────\n` +
+                          `<b>🕒 Thời gian:</b> <code>${dateStr}</code>`;
+            
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: tgMsg, parse_mode: 'HTML' })
+            });
+        }
+
+        // Tạo thông báo trong hệ thống Dashboard
+        await createNotification({
+            ownerId: ownerId,
+            title: '💬 Tin nhắn Facebook mới',
+            body: `ID: ${senderId} vừa nhắn: "${messageText}"`
+        });
+
+    } catch (e) {
+        console.error('❌ Lỗi xử lý tin nhắn FB:', e.message);
+    }
+}
+
+app.get('/api/webhook/facebook', async (req, res) => {
+    const verifyToken = await db.getSetting('fb_verify_token') || 'aishop_verify_token';
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode && token) {
+        if (mode === 'subscribe' && token === verifyToken) {
+            console.log('✅ Facebook Webhook Verified!');
+            res.status(200).send(challenge);
+        } else {
+            res.sendStatus(403);
+        }
+    }
+});
+
+app.post('/api/webhook/facebook', async (req, res) => {
+    const body = req.body;
+
+    if (body.object === 'page') {
+        body.entry.forEach(entry => {
+            const webhook_event = entry.messaging[0];
+            if (webhook_event.message && webhook_event.message.text) {
+                handleFacebookMessage(
+                    webhook_event.sender.id, 
+                    entry.id, 
+                    webhook_event.message.text
+                );
+            }
+        });
+        res.status(200).send('EVENT_RECEIVED');
+    } else {
+        res.sendStatus(404);
+    }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -811,6 +893,30 @@ app.post('/api/settings/renewal', authMiddleware, requireRole('superadmin'), asy
         res.status(500).json({ error: e.message });
     }
 });
+
+// Facebook Webhook Settings
+app.get('/api/settings/facebook', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        res.json({
+            verifyToken: await db.getSetting('fb_verify_token') || '',
+            accessToken: await db.getSetting('fb_access_token') || ''
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings/facebook', authMiddleware, requireRole('superadmin'), async (req, res) => {
+    try {
+        const { verifyToken, accessToken } = req.body;
+        if (verifyToken !== undefined) await db.setSetting('fb_verify_token', verifyToken);
+        if (accessToken !== undefined) await db.setSetting('fb_access_token', accessToken);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 // Telegram & Email Settings Management
 app.get('/api/settings/notifications', authMiddleware, async (req, res) => {
